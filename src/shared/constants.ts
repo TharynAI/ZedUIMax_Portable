@@ -1,14 +1,3 @@
-/* START> Tharyn | CursorCLI
-    2026-05-03
-    What: Cursor CLI binary constant for launch command support
-    Why: Cursor CLI launch commands still use the legacy binary fallback until Phase 5 moves launches to portable config
-    Expected: Discovery paths are not exported from constants; provider roots come from portable setup config
-*/
-export const CURSOR_BINARY = '/root/.local/bin/cursor-agent';
-// <END Tharyn | CursorCLI
-export const CLAUDE_BINARY = '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude';
-export const MCP_CONFIG = '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json';
-
 // Providers
 /* START> Tharyn | CursorCLI
     2026-05-03

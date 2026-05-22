@@ -5,6 +5,8 @@
 # Arguments
 TARGET_DIR="$1"
 SESSION_ID="$2"
+CLAUDE_PATH="${ZEDUI_CLAUDE_BINARY:-$3}"
+MCP_CONFIG="${ZEDUI_CLAUDE_MCP_CONFIG:-$4}"
 
 # Color codes
 RED='\033[0;31m'
@@ -23,6 +25,11 @@ if [ -z "$SESSION_ID" ]; then
     exit 1
 fi
 
+if [ -z "$CLAUDE_PATH" ]; then
+    echo -e "${RED}✗ No Claude binary specified. Pass it as arg 3 or set ZEDUI_CLAUDE_BINARY.${NC}"
+    exit 1
+fi
+
 # Change to target directory
 cd "$TARGET_DIR" || {
     echo -e "${RED}✗ Cannot change to directory: $TARGET_DIR${NC}"
@@ -37,11 +44,14 @@ echo ""
 export CLAUDE_ALLOW_ROOT_BYPASS=1
 export CLAUDE_DISABLE_UPDATES=1
 
-CLAUDE_PATH="/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude"
-MCP_CONFIG="/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json"
-
 # Launch Claude with resume flag
-"$CLAUDE_PATH" --permission-mode bypassPermissions --mcp-config "$MCP_CONFIG" --resume "$SESSION_ID"
+CLAUDE_ARGS=(--permission-mode bypassPermissions)
+if [ -n "$MCP_CONFIG" ]; then
+    CLAUDE_ARGS+=(--mcp-config "$MCP_CONFIG")
+fi
+CLAUDE_ARGS+=(--resume "$SESSION_ID")
+
+"$CLAUDE_PATH" "${CLAUDE_ARGS[@]}"
 
 # Preserve exit code
 EXIT_CODE=$?

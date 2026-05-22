@@ -11,23 +11,17 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 import {
-  CLAUDE_BINARY,
-  CURSOR_BINARY,
   DEFAULT_DAYS,
   DEFAULT_LIMIT,
-  LAUNCH_ENV,
-  MCP_CONFIG,
   MIN_SESSION_SIZE,
   ProviderId,
 } from '../shared/constants';
 import {
   DEFAULT_PROVIDERS,
-  LAUNCHER_PATHS,
   buildProviderSessionId as buildSessionId,
   parseProviderSessionId,
-  toWslPath,
-  wslToWindowsPath,
 } from './provider-utils';
+import { buildClaudeLaunch, buildCodexLaunch, buildCursorLaunch } from './launch-config';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
 import type { PortableProviderConfig } from '../shared/portable-config';
 /* START> Tharyn | CursorCLI
@@ -1293,50 +1287,52 @@ export function getResumeInfo(sessionId: string): ResumeInfo | null {
 
   const cwd = details.cwd;
 
-  switch (providerId) {
-    case 'claude': {
-      const envPrefix = Object.entries(LAUNCH_ENV).map(([k, v]) => `${k}=${v}`).join(' ');
-      const wslShellCommand = `cd "${cwd}" && ${envPrefix} ${CLAUDE_BINARY} --permission-mode bypassPermissions --mcp-config "${MCP_CONFIG}" --resume ${rawId}`;
-      const wtCommand = `wt wsl -- ${LAUNCHER_PATHS.claudeResumeScript} '${cwd}' '${rawId}'`;
-      return {
-        sessionId,
-        projectPath: details.projectDisplay,
-        cwd,
-        resumeCommand: wslShellCommand,
-        wslShellCommand,
-        wtCommand,
-      };
+  try {
+    switch (providerId) {
+      case 'claude': {
+        const launch = buildClaudeLaunch('resume', cwd, rawId);
+        const wslShellCommand = launch.wslShellCommand || launch.displayCommand;
+        return {
+          sessionId,
+          projectPath: details.projectDisplay,
+          cwd,
+          resumeCommand: wslShellCommand,
+          wslShellCommand,
+          wtCommand: launch.displayCommand,
+        };
+      }
+      case 'codex': {
+        const launch = buildCodexLaunch('resume', cwd, rawId);
+        const wslShellCommand = launch.wslShellCommand || launch.displayCommand;
+        return {
+          sessionId,
+          projectPath: details.projectDisplay,
+          cwd,
+          resumeCommand: wslShellCommand,
+          wslShellCommand,
+          wtCommand: launch.displayCommand,
+        };
+      }
+      case 'cursor': {
+        const launch = buildCursorLaunch('resume', cwd, rawId);
+        const wslShellCommand = launch.wslShellCommand || launch.displayCommand;
+        return {
+          sessionId,
+          projectPath: details.projectDisplay,
+          cwd,
+          resumeCommand: wslShellCommand,
+          wslShellCommand,
+          wtCommand: launch.displayCommand,
+        };
+      }
+      default: {
+        const _exhaustive: never = providerId;
+        void _exhaustive;
+        return null;
+      }
     }
-    case 'codex': {
-      const wslShellCommand = `cd "${cwd}" && codex resume --id ${rawId}`;
-      const wtCommand = `wt powershell -ExecutionPolicy Bypass -File "${LAUNCHER_PATHS.codexResumeScript}" -PathFromExplorer "${wslToWindowsPath(cwd)}" ${rawId}`;
-      return {
-        sessionId,
-        projectPath: details.projectDisplay,
-        cwd,
-        resumeCommand: wslShellCommand,
-        wslShellCommand,
-        wtCommand,
-      };
-    }
-    case 'cursor': {
-      const wslCwd = toWslPath(cwd);
-      const wslShellCommand = `cd "${wslCwd}" && ${CURSOR_BINARY} --workspace "${wslCwd}" --resume ${rawId}`;
-      const wtCommand = `wt wsl --cd "${wslCwd}" -- ${CURSOR_BINARY} --workspace '${wslCwd}' --resume '${rawId}'`;
-      return {
-        sessionId,
-        projectPath: details.projectDisplay,
-        cwd: wslCwd,
-        resumeCommand: wslShellCommand,
-        wslShellCommand,
-        wtCommand,
-      };
-    }
-    default: {
-      const _exhaustive: never = providerId;
-      void _exhaustive;
-      return null;
-    }
+  } catch {
+    return null;
   }
 }
 // <END Tharyn | CursorCLI

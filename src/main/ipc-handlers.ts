@@ -43,6 +43,7 @@ import {
   runPortableDiagnostics,
   testProvider,
 } from './portable-config';
+import { buildAssistantLaunch } from './launch-config';
 import { getRuntimePaths } from './runtime-paths';
 import {
   createProEngSession,
@@ -80,9 +81,6 @@ function toWindowsPath(p: string): string {
 * Store app settings in data/settings.json alongside SQLite database
 * 2025-12-02 Initial implementation
 */
-const DEFAULT_ASSISTANT_WORKSPACE_WIN = 'E:\\ZedBang\\Projects';
-const DEFAULT_ASSISTANT_WORKSPACE_WSL = '/mnt/e/ZedBang/Projects';
-
 function getSettingsFile(): string {
   return getRuntimePaths().settingsFile;
 }
@@ -531,9 +529,10 @@ export function setupIpcHandlers(): void {
       Why: Enable display resolution dropdown menu functionality
       Expected: Get display list with device names, change resolution by device
   */
-  const { exec } = require('child_process');
+  const { exec, execFile } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
+  const execFileAsync = promisify(execFile);
 
   // Get list of displays with current resolutions
   ipcMain.handle('display:getDisplays', async () => {
@@ -592,52 +591,9 @@ export function setupIpcHandlers(): void {
   */
   ipcMain.handle('assistant:launch', async (_, launcherId: string, mode: 'new' | 'resume', workspace?: string) => {
     try {
-      const workspaceWin = workspace || DEFAULT_ASSISTANT_WORKSPACE_WIN;
-      const workspaceWsl = toWslPath(workspaceWin) || DEFAULT_ASSISTANT_WORKSPACE_WSL;
-
-      /* START> Tharyn | CursorCLI
-          2026-05-04
-          What: Cursor route in assistant:launch — delegates to newSession() (mode=new) using passed workspace
-          Why: Phase 3 task 3.6 — Cursor needs a workspace; resume from Rocket menu uses `cursor-agent resume` (latest) since LauncherMenu has no session context
-          Expected: Cursor → New launches `wt wsl --cd <ws> -- cursor-agent --workspace <ws>`; Cursor → Resume launches latest via `cursor-agent resume`
-      */
-      if (launcherId === 'cursor') {
-        if (mode === 'new') {
-          await newSession(workspaceWin, 'cursor');
-          return { success: true };
-        }
-        // resume → latest (no specific session ID from Rocket menu)
-        const cmd = `powershell.exe -Command "wt wsl --cd '${workspaceWsl}' -- /root/.local/bin/cursor-agent --workspace '${workspaceWsl}' resume"`;
-        await execAsync(cmd);
-        return { success: true };
-      }
-      // <END Tharyn | CursorCLI
-
-      // Define launcher scripts for each assistant
-      const launchers: Record<string, { new: string; resume: string }> = {
-        claude2: {
-          new: `wt wsl -- /mnt/e/ZedBang/CLI/Cust/Claude2/_Launcher/launch-sessions.sh '${workspaceWsl}'`,
-          resume: `wt wsl -- /mnt/e/ZedBang/CLI/Cust/Claude2/_Launcher/launch-with-validation-resume.sh '${workspaceWsl}'`,
-        },
-        codex2: {
-          new: `powershell.exe -ExecutionPolicy Bypass -File "E:\\ZedBang\\CLI\\Cust\\Codex2\\_Launcher\\cust_codex.ps1" -PathFromExplorer "${workspaceWin}"`,
-          resume: `powershell.exe -ExecutionPolicy Bypass -File "E:\\ZedBang\\CLI\\Cust\\Codex2\\_Launcher\\cust_codex_resume.ps1" -PathFromExplorer "${workspaceWin}"`,
-        },
-        gemini3: {
-          new: `powershell.exe -ExecutionPolicy Bypass -File "E:\\ZedBang\\CLI\\Cust\\Gemini3\\_Launcher\\gemini3-launcher.ps1" -PathFromExplorer "${workspaceWin}"`,
-          resume: `powershell.exe -ExecutionPolicy Bypass -File "E:\\ZedBang\\CLI\\Cust\\Gemini3\\_Launcher\\gemini3-launcher-resume.ps1" -PathFromExplorer "${workspaceWin}"`,
-        },
-      };
-
-      const launcher = launchers[launcherId];
-      if (!launcher) {
-        return { success: false, error: `Unknown launcher: ${launcherId}` };
-      }
-
-      const command = launcher[mode];
-      await execAsync(command);
-
-      return { success: true };
+      const launch = buildAssistantLaunch(launcherId as any, mode, workspace);
+      await execFileAsync(launch.command, launch.args, { windowsHide: false });
+      return { success: true, command: launch.displayCommand };
     } catch (error: any) {
       console.error(`Failed to launch ${launcherId} (${mode}):`, error);
       return { success: false, error: error.message };

@@ -5,7 +5,7 @@
  * Uses shell scripts in _Launcher/ for reliable execution.
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -13,16 +13,21 @@ import os from 'os';
 import crypto from 'crypto';
 import { getSessionDetails } from './session-store';
 import { createBranch, linkBranch, setAnnotation, getAnnotation } from './metadata-db';
-import { ProviderId, CURSOR_BINARY } from '../shared/constants';
+import { ProviderId } from '../shared/constants';
 import {
-  LAUNCHER_PATHS,
   buildProviderSessionId,
   parseProviderSessionId,
   toWslPath,
-  wslToWindowsPath,
 } from './provider-utils';
+import {
+  buildClaudeLaunch,
+  buildCodexLaunch,
+  buildCursorCreateChatCommand,
+  buildCursorLaunch,
+  buildCursorSeededBranchLaunch,
+} from './launch-config';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /* START> Tharyn | ZedUI EPIPEfix
     2026-01-11
@@ -47,23 +52,9 @@ function safeError(...args: any[]): void {
 }
 // <END Tharyn | ZedUI EPIPEfix
 
-// Claude paths (for getResumeCommand display)
-const CLAUDE_BINARY = '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude';
-const MCP_CONFIG = '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json';
-
-// Environment variables for Claude
-const LAUNCH_ENV = {
-  CLAUDE_ALLOW_ROOT_BYPASS: '1',
-  CLAUDE_DISABLE_UPDATES: '1',
-};
-
-/**
- * Build environment export prefix (for display purposes).
- */
-function buildEnvPrefix(): string {
-  return Object.entries(LAUNCH_ENV)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(' ');
+async function runLaunchCommand(command: string, args: string[], label: string): Promise<void> {
+  safeLog(label, [command, ...args].join(' '));
+  await execFileAsync(command, args, { windowsHide: false });
 }
 
 /**
@@ -90,12 +81,9 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
   */
   switch (providerId) {
     case 'codex': {
-      const winCwd = wslToWindowsPath(cwd);
-      const script = codexVariant === 'codexSub' ? LAUNCHER_PATHS.codexSubResumeScript : LAUNCHER_PATHS.codexResumeScript;
-      const psCommand = `cmd.exe /c "wt powershell -ExecutionPolicy Bypass -File ${script} -PathFromExplorer \\"${winCwd}\\" ${rawId}"`;
-      safeLog('Launching Codex session:', psCommand);
+      const launch = buildCodexLaunch('resume', cwd, rawId, codexVariant);
       try {
-        await execAsync(psCommand);
+        await runLaunchCommand(launch.command, launch.args, 'Launching Codex session:');
       } catch (error) {
         safeError('Failed to launch Codex session:', error);
         throw error;
@@ -103,36 +91,21 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
       return;
     }
     case 'cursor': {
-      /* START> Tharyn | CursorCLI
-          2026-05-04
-          What: Actionable error if cursor-agent binary missing (Phase 3 task 3.7)
-          Why: Codex review #7 — silent failure if WSL binary path is wrong; users had no way to diagnose
-          Expected: Throws with the exact path and a hint to install/verify cursor-agent
-      */
-      // Note: CURSOR_BINARY is a WSL path; check via WSL since fs.existsSync on Windows can't see WSL filesystem reliably
-      // We rely on the launch error from execAsync to surface the issue, but log the path explicitly so the failure is diagnostic.
-      // <END Tharyn | CursorCLI
-      const wslCwd = toWslPath(cwd);
-      // wt wsl --cd <wslCwd> -- <binary> --workspace <wslCwd> --resume <rawUuid>
-      // Single-quote args inside the wt command to keep WSL bash happy with paths containing spaces.
-      const psCommand = `wt wsl --cd "${wslCwd}" -- ${CURSOR_BINARY} --workspace '${wslCwd}' --resume '${rawId}'`;
-      safeLog('Launching Cursor session:', psCommand, '(binary=', CURSOR_BINARY, ')');
+      const launch = buildCursorLaunch('resume', cwd, rawId);
       try {
-        await execAsync(`powershell.exe -Command "${psCommand}"`);
+        await runLaunchCommand(launch.command, launch.args, 'Launching Cursor session:');
       } catch (error) {
-        safeError(`Failed to launch Cursor session (verify ${CURSOR_BINARY} exists in WSL):`, error);
-        throw new Error(`Cursor launch failed. Verify cursor-agent is at ${CURSOR_BINARY} in WSL. Underlying: ${String(error)}`);
+        safeError('Failed to launch Cursor session:', error);
+        throw error;
       }
       return;
     }
     case 'claude': {
-      // Use the resume script - much cleaner than inline command construction (Claude)
-      const psCommand = `wt wsl -- ${LAUNCHER_PATHS.claudeResumeScript} '${cwd}' '${rawId}'`;
-      safeLog('Launching session:', psCommand);
+      const launch = buildClaudeLaunch('resume', cwd, rawId);
       try {
-        await execAsync(`powershell.exe -Command "${psCommand}"`);
+        await runLaunchCommand(launch.command, launch.args, 'Launching Claude session:');
       } catch (error) {
-        safeError('Failed to launch session:', error);
+        safeError('Failed to launch Claude session:', error);
         throw error;
       }
       return;
@@ -150,7 +123,7 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
  * Start a new session in the specified directory (provider-aware).
  */
 export async function newSession(directory: string, providerId: ProviderId = 'claude', opts?: { codexVariant?: 'codex' | 'codexSub' }): Promise<void> {
-  let psCommand: string;
+  let launch;
   const codexVariant = opts?.codexVariant || 'codex';
 
   /* START> Tharyn | CursorCLI
@@ -161,18 +134,15 @@ export async function newSession(directory: string, providerId: ProviderId = 'cl
   */
   switch (providerId) {
     case 'codex': {
-      const winCwd = wslToWindowsPath(directory);
-      const script = codexVariant === 'codexSub' ? LAUNCHER_PATHS.codexSubNewScript : LAUNCHER_PATHS.codexNewScript;
-      psCommand = `cmd.exe /c "wt powershell -ExecutionPolicy Bypass -File ${script} -PathFromExplorer \\"${winCwd}\\""`;
+      launch = buildCodexLaunch('new', directory, undefined, codexVariant);
       break;
     }
     case 'cursor': {
-      const wslCwd = toWslPath(directory);
-      psCommand = `powershell.exe -Command "wt wsl --cd '${wslCwd}' -- ${CURSOR_BINARY} --workspace '${wslCwd}'"`;
+      launch = buildCursorLaunch('new', directory);
       break;
     }
     case 'claude': {
-      psCommand = `wt wsl -- ${LAUNCHER_PATHS.claudeNewSessionScript} '${directory}'`;
+      launch = buildClaudeLaunch('new', directory);
       break;
     }
     default: {
@@ -183,10 +153,8 @@ export async function newSession(directory: string, providerId: ProviderId = 'cl
   }
   // <END Tharyn | CursorCLI
 
-  safeLog('Launching new session:', psCommand);
-
   try {
-    await execAsync(psCommand);
+    await runLaunchCommand(launch.command, launch.args, 'Launching new session:');
   } catch (error) {
     safeError('Failed to launch new session:', error);
     throw error;
@@ -212,16 +180,29 @@ export function getResumeCommand(sessionId: string): string | null {
       Expected: Cursor returns paste-friendly WSL shell command using raw UUID (not provider-prefixed)
   */
   switch (providerId) {
-    case 'codex':
-      return `cd "${cwd}" && codex resume --id ${rawId}`;
+    case 'codex': {
+      try {
+        const launch = buildCodexLaunch('resume', cwd, rawId);
+        return launch.wslShellCommand || launch.displayCommand;
+      } catch {
+        return null;
+      }
+    }
     case 'cursor': {
-      const wslCwd = toWslPath(cwd);
-      return `cd "${wslCwd}" && ${CURSOR_BINARY} --workspace "${wslCwd}" --resume ${rawId}`;
+      try {
+        const launch = buildCursorLaunch('resume', cwd, rawId);
+        return launch.wslShellCommand || launch.displayCommand;
+      } catch {
+        return null;
+      }
     }
     case 'claude': {
-      const envPrefix = buildEnvPrefix();
-      const claudeCmd = `${CLAUDE_BINARY} --permission-mode bypassPermissions --mcp-config "${MCP_CONFIG}" --resume ${rawId}`;
-      return `cd "${cwd}" && ${envPrefix} ${claudeCmd}`;
+      try {
+        const launch = buildClaudeLaunch('resume', cwd, rawId);
+        return launch.wslShellCommand || launch.displayCommand;
+      } catch {
+        return null;
+      }
     }
     default: {
       const _exhaustive: never = providerId;
@@ -323,8 +304,8 @@ function buildCursorBranchPrompt(
  * Returns the trimmed UUID, or throws if the output is not a valid UUID.
  */
 async function mintCursorChatUuid(): Promise<string> {
-  const cmd = `wsl.exe -e bash -lc "echo n | timeout 15 ${CURSOR_BINARY} create-chat"`;
-  const { stdout } = await execAsync(cmd);
+  const launch = buildCursorCreateChatCommand();
+  const { stdout } = await execFileAsync(launch.command, launch.args, { windowsHide: true });
   // Output may include leading/trailing whitespace; UUID is the only thing.
   const trimmed = stdout.trim().split(/\s+/).pop() || '';
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
@@ -427,10 +408,9 @@ async function branchCursorSession(
   //    cursor-agent --resume <id> "<prompt>" support was deferred in Phase 0. Even if positional
   //    prompt is unsupported, the user sees a freshly-resumed Cursor session and can paste the
   //    handoff manually from the temp file path printed in main log.
-  const psCommand = `wt wsl --cd "${wslCwd}" -- bash -lc "${CURSOR_BINARY} --workspace '${wslCwd}' --resume '${newRawUuid}' \\"$(cat '${tempWslPath}')\\""`;
-  safeLog('[BRANCH:cursor] Launching:', psCommand);
+  const launch = buildCursorSeededBranchLaunch(wslCwd, newRawUuid, tempWslPath);
   try {
-    await execAsync(`powershell.exe -Command "${psCommand}"`);
+    await runLaunchCommand(launch.command, launch.args, '[BRANCH:cursor] Launching:');
   } catch (error) {
     safeError('[BRANCH:cursor] Launch failed (branch DB row was still created):', error);
     // Don't fail the whole branch — DB rows are intact, user can resume manually
@@ -608,16 +588,12 @@ export async function branchSession(
     // 6. Launch the new session
     const cwd = details.cwd || details.projectDisplay;
     if (providerId === 'claude') {
-      const psCommand = `wt wsl -- ${LAUNCHER_PATHS.claudeResumeScript} '${cwd}' '${newRawSessionId}'`;
-      safeLog('Launching branched session:', psCommand);
-      await execAsync(`powershell.exe -Command "${psCommand}"`);
+      const launch = buildClaudeLaunch('resume', cwd, newRawSessionId);
+      await runLaunchCommand(launch.command, launch.args, 'Launching branched Claude session:');
     } else {
       const codexVariant = opts?.codexVariant || 'codex';
-      const winCwd = wslToWindowsPath(cwd);
-      const script = codexVariant === 'codexSub' ? LAUNCHER_PATHS.codexSubResumeScript : LAUNCHER_PATHS.codexResumeScript;
-      const psCommand = `cmd.exe /c "wt powershell -ExecutionPolicy Bypass -File ${script} -PathFromExplorer \\"${winCwd}\\" ${newRawSessionId}"`;
-      safeLog('Launching branched Codex session:', psCommand);
-      await execAsync(psCommand);
+      const launch = buildCodexLaunch('resume', cwd, newRawSessionId, codexVariant);
+      await runLaunchCommand(launch.command, launch.args, 'Launching branched Codex session:');
     }
 
     return {
