@@ -68,8 +68,8 @@ export interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
   defaultDaysFilter: 30,
   defaultTreeMode: 'type',
-  claudeBinaryPath: '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude',
-  mcpConfigPath: '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json',
+  claudeBinaryPath: '',
+  mcpConfigPath: '',
   confirmOnDelete: true,
   ungroupedCleanupBatchSize: 10,
   hideEmptyTypeGroups: false,
