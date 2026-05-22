@@ -1,0 +1,28 @@
+Windows Registry Editor Version 5.00
+
+; ZedUIMax Session Launcher - Right-click context menu entry
+; Adds "ZedUIMax Sessions" option to folder background right-click menu
+; NOTE: This installer writes HKCU entries so it works without admin.
+
+; First, REMOVE old entries (machine + user) in case they exist
+[-HKEY_CLASSES_ROOT\Directory\Background\shell\ZedUIMax_Sessions]
+[-HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ZedUIMax_Sessions]
+[-HKEY_CLASSES_ROOT\Directory\shell\ZedUIMax_Sessions]
+[-HKEY_CURRENT_USER\Software\Classes\Directory\shell\ZedUIMax_Sessions]
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Directory\Background\shell\ZedUIMax_Sessions]
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Classes\Directory\shell\ZedUIMax_Sessions]
+
+; Add user-level entries (works without admin privileges)
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ZedUIMax_Sessions]
+@="ZedUIMax Sessions"
+"Icon"="shell32.dll,294"
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\ZedUIMax_Sessions\command]
+@="wscript.exe //B //nologo \"E:\\ZedBang\\ZedUIMax\\_Launcher\\zeduimax-launcher.vbs\""
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\ZedUIMax_Sessions]
+@="ZedUIMax Sessions"
+"Icon"="shell32.dll,294"
+
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\ZedUIMax_Sessions\command]
+@="wscript.exe //B //nologo \"E:\\ZedBang\\ZedUIMax\\_Launcher\\zeduimax-launcher.vbs\""

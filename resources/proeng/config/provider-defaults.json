@@ -1,0 +1,17 @@
+{
+  "defaultModels": {
+    "anthropic": "claude-opus-best",
+    "openai": "gpt-best",
+    "gemini": "gemini-best"
+  },
+  "apiModels": {
+    "anthropic": "claude-3-5-sonnet-latest",
+    "openai": "gpt-4.1-mini",
+    "gemini": "gemini-2.0-flash"
+  },
+  "modelAliases": {
+    "claude-opus-best": "claude-3-5-sonnet-latest",
+    "gpt-best": "gpt-4.1-mini",
+    "gemini-best": "gemini-2.0-flash"
+  }
+}

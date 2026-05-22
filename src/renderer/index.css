@@ -1,0 +1,710 @@
+/* START> Tharyn | ZedUI Cyberpunk
+    2025-12-28
+    What: Cyberpunk aesthetic overhaul - sharp edges, glows, custom titlebar
+    Why: Transform dated flat design to modern sharp/cyberpunk style
+    Expected: Tech-forward UI with glowing accents and angular elements
+    2025-12-28
+    What: Update titlebar for titleBarOverlay - native controls
+    Why: Enable Windows snap support (Aero Snap, Snap Layouts)
+    Expected: Branding + native controls, full snap functionality
+    2025-12-28
+    What: Remove separator from titlebar CSS (moved to App.tsx)
+    Why: Titlebar separator was cut off by Windows native controls
+    Expected: Full-width separator line below entire titlebar row
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   CUSTOM TITLEBAR - CYBERPUNK STYLE
+   ============================================ */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: #202020;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.titlebar-drag {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  padding-right: 0;
+  -webkit-app-region: drag;
+}
+
+.titlebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Share Tech Mono', 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.titlebar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #f59e0b;
+  color: #1c1c1c;
+  font-weight: 700;
+  font-size: 11px;
+  clip-path: polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%);
+}
+
+.titlebar-text {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.titlebar-subtitle {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  width: 46px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #d1d5db;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.titlebar-btn:hover {
+  background: #2b2b2b;
+  color: #f59e0b;
+}
+
+.titlebar-btn:active {
+  background: #1f1f1f;
+}
+
+.titlebar-btn-close:hover {
+  background: #b91c1c;
+  color: #fef2f2;
+}
+
+.resize-handle {
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.1s ease;
+}
+
+.resize-handle:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+/* ============================================
+   SCROLLBAR - CYBERPUNK STYLE
+   2026-01-01: Increased size (16px width/height)
+   Note: calc() with CSS vars doesn't work in ::-webkit-scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1c1c1c;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 0;
+  border-left: 3px solid rgba(245, 158, 11, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+  border-left-color: rgba(245, 158, 11, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+  background: #1c1c1c;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #1c1c1c;
+  color: #f5f5f5;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #1c1c1c;
+}
+
+/* ============================================
+   TREE NODES - SHARP CYBERPUNK STYLE
+   ============================================ */
+
+.tree-node {
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 2px solid transparent;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.tree-node:hover {
+  background-color: #303030;
+  border-left-color: rgba(245, 158, 11, 0.3);
+}
+
+.tree-node.selected {
+  background-color: rgba(245, 158, 11, 0.15);
+  border-left-color: #f59e0b;
+  box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.1);
+}
+
+.tree-node.selected::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.tree-node.group {
+  font-weight: 600;
+  color: #9ca3af;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.browse-tree-group {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.browse-tree-group:hover {
+  color: #f5f5f5;
+}
+
+.browse-tree-session {
+  cursor: pointer;
+  width: 100%;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  padding-right: 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  position: relative;
+  background: rgba(42, 42, 42, 0.6);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.browse-tree-session:hover {
+  background: rgba(48, 48, 48, 0.9);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.browse-tree-session.is-selected {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18);
+}
+
+.browse-tree-session.is-multi-selected {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(252, 211, 77, 0.35);
+}
+
+.browse-preview-card {
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+  background: rgba(42, 42, 42, 0.45);
+  padding: 16px;
+}
+
+.browse-section-label {
+  color: rgba(252, 211, 77, 0.65);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.browse-empty-state {
+  border: 1px dashed #3a3a3a;
+  border-radius: 2px;
+  background: rgba(42, 42, 42, 0.35);
+  padding: 32px 16px;
+  max-width: 420px;
+}
+
+/* ============================================
+   TAG CHIPS - ANGULAR STYLE
+   ============================================ */
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-radius: 2px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 12px;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.tag-chip:hover {
+  background-color: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+}
+
+/* ============================================
+   CONTEXT MENU - CYBER PANEL
+   ============================================ */
+
+.context-menu {
+  position: fixed;
+  background-color: #252525;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 2px;
+  padding: 4px 0;
+  min-width: 180px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 1px rgba(245, 158, 11, 0.5);
+  z-index: 1000;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f5f5f5;
+  transition: all 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(245, 158, 11, 0.3) 50%, transparent 100%);
+  margin: 4px 0;
+}
+
+/* ============================================
+   INPUT STYLES - SHARP WITH GLOW FOCUS
+   ============================================ */
+
+input, textarea {
+  background-color: #1c1c1c;
+  border: 1px solid #404040;
+  border-radius: 2px;
+  padding: 8px 12px;
+  color: #f5f5f5;
+  width: 100%;
+  transition: all 0.15s ease;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b, 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+input::placeholder, textarea::placeholder {
+  color: #6b7280;
+}
+
+/* ============================================
+   SELECT STYLES - ANGULAR
+   ============================================ */
+
+select {
+  background-color: #1c1c1c;
+  border: 1px solid #404040;
+  border-radius: 2px;
+  padding: 8px 12px;
+  color: #f5f5f5;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+select:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b, 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+select option {
+  background-color: #252525;
+  color: #f5f5f5;
+}
+
+/* ============================================
+   BUTTON STYLES - CYBER WITH GLOW
+   ============================================ */
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary {
+  background-color: #f59e0b;
+  color: #1c1c1c;
+}
+
+.btn-primary:hover {
+  background-color: #fbbf24;
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.5);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #9ca3af;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: #9ca3af;
+}
+
+.btn-ghost:hover {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+/* ============================================
+   TAB STYLES - SHARP CYBERPUNK
+   ============================================ */
+
+.tab {
+  padding: 10px 24px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: #9ca3af;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  position: relative;
+}
+
+.tab:hover {
+  color: #f59e0b;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.tab.active {
+  color: #f59e0b;
+  border-bottom-color: #f59e0b;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+/* ============================================
+   ICON BUTTONS - GLOW HOVER
+   ============================================ */
+
+.icon-btn {
+  padding: 8px;
+  border-radius: 2px;
+  color: #9ca3af;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.5));
+}
+
+/* ============================================
+   FAVORITE STAR
+   ============================================ */
+
+.star {
+  color: #fbbf24;
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.5));
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card {
+  background-color: #252525;
+  border: 1px solid #404040;
+  border-radius: 2px;
+}
+
+.section-header {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.text-accent {
+  color: #f59e0b;
+}
+
+.link-muted {
+  color: #9ca3af;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.link-muted:hover {
+  color: #f59e0b;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+/* Rounded override for cyber aesthetic */
+.rounded-cyber {
+  border-radius: 2px !important;
+}
+
+/* ============================================
+   BRANCH VISUALIZATION
+   ============================================ */
+
+.tree-node.branch-child {
+  position: relative;
+}
+
+.branch-connector {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 50%;
+  width: 12px;
+  border-left: 2px solid rgba(245, 158, 11, 0.3);
+  border-bottom: 2px solid rgba(245, 158, 11, 0.3);
+  border-bottom-left-radius: 0;
+}
+
+.branch-connector:not(.last-child)::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  bottom: -100%;
+  border-left: 2px solid rgba(245, 158, 11, 0.3);
+}
+
+.branch-connector.last-child::after {
+  display: none;
+}
+
+.tree-node.group.has-branches {
+  position: relative;
+}
+
+.tree-node.group.has-branches::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  background-color: #f59e0b;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+
+/* ============================================
+   MULTI-SELECT & BULK ACTIONS
+   ============================================ */
+
+.tree-node.multi-selected {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-left-color: #3b82f6;
+}
+
+.tree-node.multi-selected:hover {
+  background-color: rgba(59, 130, 246, 0.25);
+}
+
+.bulk-action-bar {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #252525;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 2px;
+  padding: 8px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.15);
+  z-index: 100;
+  animation: slideUpSharp 0.2s ease-out;
+}
+
+@keyframes slideUpSharp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ============================================
+   DIALOG/MODAL STYLES
+   ============================================ */
+
+.dialog-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-content {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 2px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(245, 158, 11, 0.3);
+}
+
+/* ============================================
+   GLOW UTILITIES
+   ============================================ */
+
+.glow-sm {
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.glow-md {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+}
+
+.glow-lg {
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.5);
+}
+
+.glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); }
+}
+
+/* ============================================
+   CODE/MESSAGE BLOCKS - CONVERSATION VIEWER
+   ============================================ */
+
+.code-block {
+  border-radius: 2px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.message-bubble {
+  border-radius: 2px;
+}
+
+.message-bubble.user {
+  border-left: 2px solid #3b82f6;
+}
+
+.message-bubble.assistant {
+  border-left: 2px solid #f59e0b;
+}
+
+/* <END Tharyn | ZedUI Cyberpunk */
