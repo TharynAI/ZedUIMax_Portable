@@ -1,30 +1,9 @@
-import path from 'path';
-import os from 'os';
-
-/* START> Tharyn | ZedUI Cyberpunk
-    2025-12-28
-    What: Windows-native path for WSL Claude sessions
-    Why: Running on Windows needs UNC path to access WSL filesystem
-    Expected: Sessions load from \\wsl.localhost\Ubuntu-22.04\root\.claude\projects
-*/
-// Claude paths - use WSL UNC path when running on Windows
-const isWindows = process.platform === 'win32';
-export const CLAUDE_PROJECTS_DIR = isWindows
-  ? '\\\\wsl.localhost\\Ubuntu-22.04\\root\\.claude\\projects'
-  : path.join(os.homedir(), '.claude', 'projects');
-export const CODEX_SESSIONS_DIR = isWindows
-  ? '\\\\wsl.localhost\\Ubuntu-22.04\\root\\.codex\\sessions'
-  : path.join(os.homedir(), '.codex', 'sessions');
-// <END Tharyn | ZedUI Cyberpunk
 /* START> Tharyn | CursorCLI
     2026-05-03
-    What: Add Cursor CLI projects/binary constants for full-integration provider support
-    Why: ZedUIMax must discover/resume/branch/delete Cursor CLI sessions as a peer provider
-    Expected: Cursor sessions load from \\wsl.localhost\Ubuntu-22.04\root\.cursor\projects on Windows
+    What: Cursor CLI binary constant for launch command support
+    Why: Cursor CLI launch commands still use the legacy binary fallback until Phase 5 moves launches to portable config
+    Expected: Discovery paths are not exported from constants; provider roots come from portable setup config
 */
-export const CURSOR_PROJECTS_DIR = isWindows
-  ? '\\\\wsl.localhost\\Ubuntu-22.04\\root\\.cursor\\projects'
-  : path.join(os.homedir(), '.cursor', 'projects');
 export const CURSOR_BINARY = '/root/.local/bin/cursor-agent';
 // <END Tharyn | CursorCLI
 export const CLAUDE_BINARY = '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude';

@@ -12,10 +12,7 @@ import path from 'path';
 import readline from 'readline';
 import {
   CLAUDE_BINARY,
-  CLAUDE_PROJECTS_DIR,
-  CODEX_SESSIONS_DIR,
   CURSOR_BINARY,
-  CURSOR_PROJECTS_DIR,
   DEFAULT_DAYS,
   DEFAULT_LIMIT,
   LAUNCH_ENV,
@@ -31,6 +28,8 @@ import {
   toWslPath,
   wslToWindowsPath,
 } from './provider-utils';
+import { loadPortableConfigFromSettingsFile } from './portable-config';
+import type { PortableProviderConfig } from '../shared/portable-config';
 /* START> Tharyn | CursorCLI
     2026-05-04
     What: Import metadata-db cwd_override helpers and deleteSessionMetadata
@@ -39,14 +38,6 @@ import {
 */
 import { deleteSessionMetadata, getCwdOverride, getAllCwdOverrides } from './metadata-db';
 // <END Tharyn | CursorCLI
-
-/* START> Tharyn | ZedUI Cyberpunk
-    2025-12-28
-    What: Import CLAUDE_PROJECTS_DIR from constants.ts
-    Why: Running on Windows needs UNC path to access WSL filesystem
-    Expected: Sessions load from \\wsl.localhost\Ubuntu-22.04\root\.claude\projects
-*/
-// <END Tharyn | ZedUI Cyberpunk
 
 // Interfaces
 export interface ProjectInfo {
@@ -76,6 +67,39 @@ export interface SessionInfo {
 export interface SessionDetails extends SessionInfo {
   messages: any[];
   version: string;
+}
+
+function getProviderRoot(config: PortableProviderConfig, providerId: ProviderId): string {
+  switch (providerId) {
+    case 'claude':
+      return config.providers.claude.enabled ? config.providers.claude.projectsDir.trim() : '';
+    case 'codex':
+      return config.providers.codex.enabled ? config.providers.codex.sessionsDir.trim() : '';
+    case 'cursor':
+      return config.providers.cursor.enabled ? config.providers.cursor.projectsDir.trim() : '';
+    default: {
+      const _exhaustive: never = providerId;
+      void _exhaustive;
+      return '';
+    }
+  }
+}
+
+function providerRootExists(config: PortableProviderConfig, providerId: ProviderId): boolean {
+  const root = getProviderRoot(config, providerId);
+  return Boolean(root && fs.existsSync(root));
+}
+
+function getConfiguredProviders(providerFilter?: ProviderId[]): {
+  config: PortableProviderConfig;
+  providers: ProviderId[];
+} {
+  const config = loadPortableConfigFromSettingsFile();
+  const requested = providerFilter && providerFilter.length ? providerFilter : DEFAULT_PROVIDERS;
+  return {
+    config,
+    providers: requested.filter((providerId) => Boolean(getProviderRoot(config, providerId))),
+  };
 }
 
 /* START> Tharyn | ZedUI Windows
@@ -417,18 +441,18 @@ function parseSessionFile(filePath: string, projectPath: string, projectDisplay:
 /**
  * Get sessions, optionally filtered by project and age.
  */
-function getClaudeSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
+function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
   const sessions: SessionInfo[] = [];
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
 
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
   }
 
-  const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+  const projectDirs = fs.readdirSync(projectsRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && !d.name.startsWith('.'))
-    .map(d => path.join(CLAUDE_PROJECTS_DIR, d.name));
+    .map(d => path.join(projectsRoot, d.name));
 
   for (const projectDir of projectDirs) {
     const dirname = path.basename(projectDir);
@@ -473,19 +497,19 @@ export function getSessions(
       Why: Cursor is a peer; omitting from default would hide Cursor sessions until a filter is set
       Expected: getSessions() returns Claude + Codex + Cursor sorted by activity
   */
-  const providers: ProviderId[] = providerFilter && providerFilter.length ? providerFilter : DEFAULT_PROVIDERS;
+  const { config, providers } = getConfiguredProviders(providerFilter);
   // <END Tharyn | CursorCLI
 
   let sessions: SessionInfo[] = [];
 
   if (providers.includes('claude')) {
-    sessions = sessions.concat(getClaudeSessions(days));
+    sessions = sessions.concat(getClaudeSessions(getProviderRoot(config, 'claude'), days));
   }
   if (providers.includes('codex')) {
-    sessions = sessions.concat(getCodexSessions(days));
+    sessions = sessions.concat(getCodexSessions(getProviderRoot(config, 'codex'), days));
   }
   if (providers.includes('cursor')) {
-    sessions = sessions.concat(getCursorSessions(days));
+    sessions = sessions.concat(getCursorSessions(getProviderRoot(config, 'cursor'), days));
   }
 
   /* START> Tharyn | CursorCLI
@@ -524,8 +548,8 @@ export function getSessions(
     Why: Discover Cursor sessions for the Browse tab as peers of Claude/Codex
     Expected: Returns SessionInfo[] for all top-level transcripts (skips the subagents/ subdirectory)
 */
-function getCursorSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
-  if (!fs.existsSync(CURSOR_PROJECTS_DIR)) {
+function getCursorSessions(projectsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
   }
 
@@ -535,7 +559,7 @@ function getCursorSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
 
   let projectSlugs: string[] = [];
   try {
-    projectSlugs = fs.readdirSync(CURSOR_PROJECTS_DIR, { withFileTypes: true })
+    projectSlugs = fs.readdirSync(projectsRoot, { withFileTypes: true })
       .filter(d => d.isDirectory() && !d.name.startsWith('.'))
       .map(d => d.name);
   } catch {
@@ -543,7 +567,7 @@ function getCursorSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
   }
 
   for (const slug of projectSlugs) {
-    const transcriptsDir = path.join(CURSOR_PROJECTS_DIR, slug, 'agent-transcripts');
+    const transcriptsDir = path.join(projectsRoot, slug, 'agent-transcripts');
     if (!fs.existsSync(transcriptsDir)) continue;
 
     let chatDirs: fs.Dirent[] = [];
@@ -638,18 +662,18 @@ function parseCursorSessionFile(filePath: string, slug: string, stat: fs.Stats):
   };
 }
 
-function findCursorTranscriptFile(rawSessionId: string): { filePath: string; slug: string } | null {
-  if (!fs.existsSync(CURSOR_PROJECTS_DIR)) return null;
+function findCursorTranscriptFile(rawSessionId: string, projectsRoot: string): { filePath: string; slug: string } | null {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) return null;
   let slugs: string[] = [];
   try {
-    slugs = fs.readdirSync(CURSOR_PROJECTS_DIR, { withFileTypes: true })
+    slugs = fs.readdirSync(projectsRoot, { withFileTypes: true })
       .filter(d => d.isDirectory() && !d.name.startsWith('.'))
       .map(d => d.name);
   } catch {
     return null;
   }
   for (const slug of slugs) {
-    const candidate = path.join(CURSOR_PROJECTS_DIR, slug, 'agent-transcripts', rawSessionId, `${rawSessionId}.jsonl`);
+    const candidate = path.join(projectsRoot, slug, 'agent-transcripts', rawSessionId, `${rawSessionId}.jsonl`);
     if (fs.existsSync(candidate)) {
       return { filePath: candidate, slug };
     }
@@ -657,8 +681,8 @@ function findCursorTranscriptFile(rawSessionId: string): { filePath: string; slu
   return null;
 }
 
-function getCursorSessionDetails(rawSessionId: string): SessionDetails | null {
-  const found = findCursorTranscriptFile(rawSessionId);
+function getCursorSessionDetails(rawSessionId: string, projectsRoot: string): SessionDetails | null {
+  const found = findCursorTranscriptFile(rawSessionId, projectsRoot);
   if (!found) return null;
 
   const { filePath, slug } = found;
@@ -742,16 +766,16 @@ function getCursorSessionDetails(rawSessionId: string): SessionDetails | null {
 }
 // <END Tharyn | CursorCLI
 
-function getClaudeSessionDetails(rawSessionId: string): SessionDetails | null {
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+function getClaudeSessionDetails(rawSessionId: string, projectsRoot: string): SessionDetails | null {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return null;
   }
 
-  const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+  const projectDirs = fs.readdirSync(projectsRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && !d.name.startsWith('.'));
 
   for (const projectDir of projectDirs) {
-    const sessionFile = path.join(CLAUDE_PROJECTS_DIR, projectDir.name, `${rawSessionId}.jsonl`);
+    const sessionFile = path.join(projectsRoot, projectDir.name, `${rawSessionId}.jsonl`);
 
     if (fs.existsSync(sessionFile)) {
       return parseSessionDetails(sessionFile, projectDir.name);
@@ -766,17 +790,22 @@ function getClaudeSessionDetails(rawSessionId: string): SessionDetails | null {
  */
 export function getSessionDetails(sessionId: string): SessionDetails | null {
   const { providerId, rawId } = parseProviderSessionId(sessionId);
+  const config = loadPortableConfigFromSettingsFile();
+  const providerRoot = getProviderRoot(config, providerId);
+  if (!providerRoot) {
+    return null;
+  }
 
   let details: SessionDetails | null;
   switch (providerId) {
     case 'claude':
-      details = getClaudeSessionDetails(rawId);
+      details = getClaudeSessionDetails(rawId, providerRoot);
       break;
     case 'codex':
-      details = getCodexSessionDetails(rawId);
+      details = getCodexSessionDetails(rawId, providerRoot);
       break;
     case 'cursor':
-      details = getCursorSessionDetails(rawId);
+      details = getCursorSessionDetails(rawId, providerRoot);
       break;
     default: {
       const _exhaustive: never = providerId;
@@ -1040,8 +1069,8 @@ function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDeta
   }
 }
 
-function getCodexSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
-  if (!fs.existsSync(CODEX_SESSIONS_DIR)) {
+function getCodexSessions(sessionsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
+  if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return [];
   }
 
@@ -1050,7 +1079,7 @@ function getCodexSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
   const scan = (windowDays: number) => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - windowDays);
-    walkCodexFiles(CODEX_SESSIONS_DIR, (filePath, stat) => {
+    walkCodexFiles(sessionsRoot, (filePath, stat) => {
       if (stat.mtime < cutoff || stat.size < MIN_SESSION_SIZE) return;
       const session = parseCodexSessionFile(filePath, stat);
       if (session) {
@@ -1069,9 +1098,9 @@ function getCodexSessions(days: number = DEFAULT_DAYS): SessionInfo[] {
   return sessions;
 }
 
-function findCodexFileById(rawSessionId: string): string | null {
+function findCodexFileById(rawSessionId: string, sessionsRoot: string): string | null {
   let found: string | null = null;
-  walkCodexFiles(CODEX_SESSIONS_DIR, (filePath) => {
+  walkCodexFiles(sessionsRoot, (filePath) => {
     if (found) return;
     if (filePath.includes(rawSessionId)) {
       found = filePath;
@@ -1080,12 +1109,12 @@ function findCodexFileById(rawSessionId: string): string | null {
   return found;
 }
 
-function getCodexSessionDetails(rawSessionId: string): SessionDetails | null {
-  if (!fs.existsSync(CODEX_SESSIONS_DIR)) {
+function getCodexSessionDetails(rawSessionId: string, sessionsRoot: string): SessionDetails | null {
+  if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return null;
   }
 
-  const sessionFile = findCodexFileById(rawSessionId);
+  const sessionFile = findCodexFileById(rawSessionId, sessionsRoot);
   if (!sessionFile) {
     return null;
   }
@@ -1206,16 +1235,18 @@ function parseSessionDetails(filePath: string, projectPath: string): SessionDeta
  */
 export function findSessionProject(sessionId: string): string | null {
   const { providerId, rawId } = parseProviderSessionId(sessionId);
+  const config = loadPortableConfigFromSettingsFile();
+  const providerRoot = getProviderRoot(config, providerId);
 
   switch (providerId) {
     case 'claude': {
-      if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+      if (!providerRoot || !fs.existsSync(providerRoot)) {
         return null;
       }
-      const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+      const projectDirs = fs.readdirSync(providerRoot, { withFileTypes: true })
         .filter(d => d.isDirectory() && !d.name.startsWith('.'));
       for (const projectDir of projectDirs) {
-        const sessionFile = path.join(CLAUDE_PROJECTS_DIR, projectDir.name, `${rawId}.jsonl`);
+        const sessionFile = path.join(providerRoot, projectDir.name, `${rawId}.jsonl`);
         if (fs.existsSync(sessionFile)) {
           return projectDir.name;
         }
@@ -1223,11 +1254,11 @@ export function findSessionProject(sessionId: string): string | null {
       return null;
     }
     case 'codex': {
-      const details = getCodexSessionDetails(rawId);
+      const details = getCodexSessionDetails(rawId, providerRoot);
       return details?.projectPath || null;
     }
     case 'cursor': {
-      const found = findCursorTranscriptFile(rawId);
+      const found = findCursorTranscriptFile(rawId, providerRoot);
       return found?.slug || null;
     }
     default: {
@@ -1316,6 +1347,20 @@ export function getResumeInfo(sessionId: string): ResumeInfo | null {
  */
 export function deleteSession(sessionId: string): { deleted: boolean; filePath: string; projectDisplay: string } | null {
   const started = Date.now();
+  const { providerId } = parseProviderSessionId(sessionId);
+  if (!providerRootExists(loadPortableConfigFromSettingsFile(), providerId)) {
+    try {
+      console.log(JSON.stringify({
+        provider: providerId,
+        action: 'delete',
+        sessionId,
+        result: 'provider_not_configured',
+        durationMs: Date.now() - started,
+      }));
+    } catch { /* ignore */ }
+    return null;
+  }
+
   const details = getSessionDetails(sessionId);
   if (!details) {
     /* START> Tharyn | CursorCLI
@@ -1528,9 +1573,10 @@ function createSnippet(text: string, matchIndex: number, matchLength: number, co
 function searchClaudeMessages(
   query: string,
   limit: number = 50,
-  days: number = 30
+  days: number = 30,
+  projectsRoot: string
 ): MessageSearchResult[] {
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
   }
 
@@ -1544,11 +1590,11 @@ function searchClaudeMessages(
 
   const queryLower = query.toLowerCase();
 
-  const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+  const projectDirs = fs.readdirSync(projectsRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && !d.name.startsWith('.'));
 
   outer: for (const projectDir of projectDirs) {
-    const projectPath = path.join(CLAUDE_PROJECTS_DIR, projectDir.name);
+    const projectPath = path.join(projectsRoot, projectDir.name);
     const projectDisplay = dirNameToDisplayPath(projectDir.name);
 
     const files = fs.readdirSync(projectPath)
@@ -1617,9 +1663,10 @@ function searchClaudeMessages(
 function searchCodexMessages(
   query: string,
   limit: number = 50,
-  days: number = 30
+  days: number = 30,
+  sessionsRoot: string
 ): MessageSearchResult[] {
-  if (!fs.existsSync(CODEX_SESSIONS_DIR)) {
+  if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return [];
   }
 
@@ -1634,7 +1681,7 @@ function searchCodexMessages(
   const queryLower = query.toLowerCase();
 
   const scan = (windowCutoff: Date) => {
-    walkCodexFiles(CODEX_SESSIONS_DIR, (filePath, stat) => {
+    walkCodexFiles(sessionsRoot, (filePath, stat) => {
       if (stat.mtime < windowCutoff || results.length >= limit) return;
 
       let messageIndex = 0;
@@ -1708,9 +1755,10 @@ function searchCodexMessages(
 function searchCursorMessages(
   query: string,
   limit: number = 50,
-  days: number = 30
+  days: number = 30,
+  projectsRoot: string
 ): MessageSearchResult[] {
-  if (!fs.existsSync(CURSOR_PROJECTS_DIR)) {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
   }
 
@@ -1721,7 +1769,7 @@ function searchCursorMessages(
 
   let projectSlugs: string[] = [];
   try {
-    projectSlugs = fs.readdirSync(CURSOR_PROJECTS_DIR, { withFileTypes: true })
+    projectSlugs = fs.readdirSync(projectsRoot, { withFileTypes: true })
       .filter(d => d.isDirectory() && !d.name.startsWith('.'))
       .map(d => d.name);
   } catch {
@@ -1729,7 +1777,7 @@ function searchCursorMessages(
   }
 
   outer: for (const slug of projectSlugs) {
-    const transcriptsDir = path.join(CURSOR_PROJECTS_DIR, slug, 'agent-transcripts');
+    const transcriptsDir = path.join(projectsRoot, slug, 'agent-transcripts');
     if (!fs.existsSync(transcriptsDir)) continue;
 
     let chatDirs: fs.Dirent[] = [];
@@ -1829,18 +1877,18 @@ export function searchMessages(
       Why: Phase 2b — Cursor must be searchable as a peer
       Expected: searchMessages('foo') returns hits across all three providers when no filter passed
   */
-  const providers = providerFilter && providerFilter.length ? providerFilter : ['claude', 'codex', 'cursor'];
+  const { config, providers } = getConfiguredProviders(providerFilter);
   // <END Tharyn | CursorCLI
   let results: MessageSearchResult[] = [];
 
   if (providers.includes('claude')) {
-    results = results.concat(searchClaudeMessages(query, limit, days));
+    results = results.concat(searchClaudeMessages(query, limit, days, getProviderRoot(config, 'claude')));
   }
   if (providers.includes('codex')) {
-    results = results.concat(searchCodexMessages(query, limit, days));
+    results = results.concat(searchCodexMessages(query, limit, days, getProviderRoot(config, 'codex')));
   }
   if (providers.includes('cursor')) {
-    results = results.concat(searchCursorMessages(query, limit, days));
+    results = results.concat(searchCursorMessages(query, limit, days, getProviderRoot(config, 'cursor')));
   }
 
   results.sort((a, b) => {

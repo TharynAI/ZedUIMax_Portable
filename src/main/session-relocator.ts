@@ -18,8 +18,9 @@
 import fs from 'fs';
 import path from 'path';
 import { setCwdOverride } from './metadata-db';
-import { CLAUDE_PROJECTS_DIR } from '../shared/constants';
+import { loadPortableConfigFromSettingsFile } from './portable-config';
 import { parseProviderSessionId, toWslPath, wslToWindowsPath } from './provider-utils';
+import type { ProviderId } from '../shared/constants';
 
 export interface RelocationResult {
   success: boolean;
@@ -42,20 +43,45 @@ export function cwdToProjectFolder(cwd: string): string {
     .replace(/\//g, '-');    // Replace slashes (results in leading -)
 }
 
+function getConfiguredProviderRoot(providerId: ProviderId): string {
+  const config = loadPortableConfigFromSettingsFile();
+  switch (providerId) {
+    case 'claude':
+      return config.providers.claude.enabled ? config.providers.claude.projectsDir.trim() : '';
+    case 'codex':
+      return config.providers.codex.enabled ? config.providers.codex.sessionsDir.trim() : '';
+    case 'cursor':
+      return config.providers.cursor.enabled ? config.providers.cursor.projectsDir.trim() : '';
+    default: {
+      const _exhaustive: never = providerId;
+      void _exhaustive;
+      return '';
+    }
+  }
+}
+
+function getWritableProviderRoot(providerId: ProviderId): string | null {
+  const root = getConfiguredProviderRoot(providerId);
+  if (!root || !fs.existsSync(root)) {
+    return null;
+  }
+  return root;
+}
+
 /**
  * Find the session file across all project folders.
  * Returns the full path to the JSONL file, or null if not found.
  */
-export function findSessionFile(sessionId: string): string | null {
-  if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+export function findSessionFile(sessionId: string, projectsRoot = getConfiguredProviderRoot('claude')): string | null {
+  if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return null;
   }
 
-  const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+  const projectDirs = fs.readdirSync(projectsRoot, { withFileTypes: true })
     .filter(d => d.isDirectory() && !d.name.startsWith('.'));
 
   for (const projectDir of projectDirs) {
-    const sessionFile = path.join(CLAUDE_PROJECTS_DIR, projectDir.name, `${sessionId}.jsonl`);
+    const sessionFile = path.join(projectsRoot, projectDir.name, `${sessionId}.jsonl`);
     if (fs.existsSync(sessionFile)) {
       return sessionFile;
     }
@@ -91,41 +117,33 @@ export function directoryExists(dirPath: string): boolean {
 export function relocateSession(sessionId: string, newCwd: string): RelocationResult {
   const started = Date.now();
   const { providerId, rawId } = parseProviderSessionId(sessionId);
+  const providerRoot = getWritableProviderRoot(providerId);
 
   // Normalize newCwd to WSL form (relocateClaudeSession expects WSL paths in JSONL; cwd_override stores normalized form)
   const normalizedNewCwd = toWslPath(newCwd).replace(/\/+$/, '');
 
   let result: RelocationResult;
 
-  switch (providerId) {
-    case 'claude':
-      result = relocateClaudeSession(rawId, normalizedNewCwd);
-      break;
-    case 'codex':
-    case 'cursor': {
-      // Metadata-only path: write cwd_override on the annotation row (using the full provider-prefixed ID)
-      if (!directoryExists(normalizedNewCwd)) {
-        result = {
-          success: false,
-          oldCwd: '',
-          newCwd: normalizedNewCwd,
-          oldProjectFolder: '',
-          newProjectFolder: '',
-          entriesUpdated: 0,
-          error: `Directory does not exist: ${normalizedNewCwd}`,
-        };
-      } else {
-        try {
-          setCwdOverride(sessionId, normalizedNewCwd);
-          result = {
-            success: true,
-            oldCwd: '',
-            newCwd: normalizedNewCwd,
-            oldProjectFolder: '',
-            newProjectFolder: '',
-            entriesUpdated: 0, // metadata-only — no JSONL entries touched
-          };
-        } catch (err) {
+  if (!providerRoot) {
+    result = {
+      success: false,
+      oldCwd: '',
+      newCwd: normalizedNewCwd,
+      oldProjectFolder: '',
+      newProjectFolder: '',
+      entriesUpdated: 0,
+      error: `Provider root is not configured or does not exist: ${providerId}`,
+    };
+  } else {
+
+    switch (providerId) {
+      case 'claude':
+        result = relocateClaudeSession(rawId, normalizedNewCwd, providerRoot);
+        break;
+      case 'codex':
+      case 'cursor': {
+        // Metadata-only path: write cwd_override on the annotation row (using the full provider-prefixed ID)
+        if (!directoryExists(normalizedNewCwd)) {
           result = {
             success: false,
             oldCwd: '',
@@ -133,24 +151,46 @@ export function relocateSession(sessionId: string, newCwd: string): RelocationRe
             oldProjectFolder: '',
             newProjectFolder: '',
             entriesUpdated: 0,
-            error: `Failed to write cwd_override: ${err}`,
+            error: `Directory does not exist: ${normalizedNewCwd}`,
           };
+        } else {
+          try {
+            setCwdOverride(sessionId, normalizedNewCwd);
+            result = {
+              success: true,
+              oldCwd: '',
+              newCwd: normalizedNewCwd,
+              oldProjectFolder: '',
+              newProjectFolder: '',
+              entriesUpdated: 0, // metadata-only — no JSONL entries touched
+            };
+          } catch (err) {
+            result = {
+              success: false,
+              oldCwd: '',
+              newCwd: normalizedNewCwd,
+              oldProjectFolder: '',
+              newProjectFolder: '',
+              entriesUpdated: 0,
+              error: `Failed to write cwd_override: ${err}`,
+            };
+          }
         }
+        break;
       }
-      break;
-    }
-    default: {
-      const _exhaustive: never = providerId;
-      void _exhaustive;
-      result = {
-        success: false,
-        oldCwd: '',
-        newCwd: normalizedNewCwd,
-        oldProjectFolder: '',
-        newProjectFolder: '',
-        entriesUpdated: 0,
-        error: 'Unknown provider',
-      };
+      default: {
+        const _exhaustive: never = providerId;
+        void _exhaustive;
+        result = {
+          success: false,
+          oldCwd: '',
+          newCwd: normalizedNewCwd,
+          oldProjectFolder: '',
+          newProjectFolder: '',
+          entriesUpdated: 0,
+          error: 'Unknown provider',
+        };
+      }
     }
   }
 
@@ -182,11 +222,11 @@ export function relocateSession(sessionId: string, newCwd: string): RelocationRe
  * 5. Writes the updated JSONL to the new location
  * 6. Deletes the old JSONL file
  */
-function relocateClaudeSession(sessionId: string, newCwd: string): RelocationResult {
+function relocateClaudeSession(sessionId: string, newCwd: string, projectsRoot: string): RelocationResult {
   // newCwd is already normalized by caller
 
   // Find the current session file
-  const currentFile = findSessionFile(sessionId);
+  const currentFile = findSessionFile(sessionId, projectsRoot);
   if (!currentFile) {
     return {
       success: false,
@@ -214,7 +254,7 @@ function relocateClaudeSession(sessionId: string, newCwd: string): RelocationRes
 
   const oldProjectFolder = path.basename(path.dirname(currentFile));
   const newProjectFolder = cwdToProjectFolder(newCwd);
-  const newProjectDir = path.join(CLAUDE_PROJECTS_DIR, newProjectFolder);
+  const newProjectDir = path.join(projectsRoot, newProjectFolder);
   const newFile = path.join(newProjectDir, `${sessionId}.jsonl`);
 
   // Check if target file already exists (shouldn't happen with UUIDs, but be safe)

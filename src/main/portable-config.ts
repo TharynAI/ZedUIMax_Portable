@@ -200,6 +200,22 @@ export function normalizePortableConfig(value: unknown): PortableProviderConfig 
 }
 // <END Tharyn | PortableInstall
 
+export function loadPortableConfigFromSettingsFile(): PortableProviderConfig {
+  try {
+    const settingsFile = getRuntimePaths().settingsFile;
+    if (!fs.existsSync(settingsFile)) {
+      return normalizePortableConfig(undefined);
+    }
+
+    const content = fs.readFileSync(settingsFile, 'utf-8');
+    const parsed = JSON.parse(content);
+    return normalizePortableConfig(parsed.portableConfig);
+  } catch (error) {
+    console.error('Failed to load portable provider config:', error);
+    return normalizePortableConfig(undefined);
+  }
+}
+
 function decodeCommandOutput(stdout: string | Buffer): string {
   if (Buffer.isBuffer(stdout)) {
     const hasNulls = stdout.includes(0);
