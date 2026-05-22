@@ -9,14 +9,13 @@
 
 import Database from 'better-sqlite3';
 import fs from 'fs';
-import path from 'path';
-import { DATA_DIR, DB_PATH } from '../shared/constants';
+import { getRuntimePaths } from './runtime-paths';
 
 /* START> Tharyn | ZedUI Cyberpunk
     2025-12-28
-    What: Import DATA_DIR and DB_PATH from constants.ts
-    Why: Running on Windows needs Windows paths for database
-    Expected: Database loads from E:\ZedBang\ZedUIMax\data\zedui.db
+    What: Load the SQLite database from the resolved portable data root
+    Why: A portable clone must not read or write another install's metadata
+    Expected: Database loads from <appRoot>\data\zedui.db
 */
 // <END Tharyn | ZedUI Cyberpunk
 
@@ -67,12 +66,14 @@ export interface BranchInfo {
  * Initialize the database schema.
  */
 export function initDb(): void {
+  const { dataDir, dbPath } = getRuntimePaths();
+
   // Ensure data directory exists
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  db = new Database(DB_PATH);
+  db = new Database(dbPath);
 
   // Enable WAL mode for better concurrent access
   db.pragma('journal_mode = WAL');

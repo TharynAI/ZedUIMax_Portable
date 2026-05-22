@@ -13,6 +13,7 @@
     "build:vite": "vite build",
     "build:electron": "node node_modules/typescript/lib/tsc.js -p tsconfig.main.json",
     "test": "node test/test-core.js",
+    "test:runtime-paths": "node test/test-runtime-paths.js",
     "test:ui": "node scripts/test-runner.js",
     "package": "npm run build && electron-builder",
     "preview": "vite preview"

@@ -35,6 +35,7 @@ import {
 } from './metadata-db';
 import { continueSession, newSession, branchSession } from './launcher';
 import { relocateSession, directoryExists } from './session-relocator';
+import { getRuntimePaths } from './runtime-paths';
 import {
   createProEngSession,
   deleteProEngSessions,
@@ -70,10 +71,12 @@ function toWindowsPath(p: string): string {
 * Store app settings in data/settings.json alongside SQLite database
 * 2025-12-02 Initial implementation
 */
-// __dirname is dist/main/main, so we need ../../.. to get to project root then data/
-const SETTINGS_FILE = path.join(__dirname, '../../../data/settings.json');
 const DEFAULT_ASSISTANT_WORKSPACE_WIN = 'E:\\ZedBang\\Projects';
 const DEFAULT_ASSISTANT_WORKSPACE_WSL = '/mnt/e/ZedBang/Projects';
+
+function getSettingsFile(): string {
+  return getRuntimePaths().settingsFile;
+}
 
 /* START> Tharyn | ZedUI WindowBounds
     2026-01-02
@@ -101,8 +104,9 @@ interface AppSettings {
 
 export function loadSettings(): Partial<AppSettings> {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const content = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+    const settingsFile = getSettingsFile();
+    if (fs.existsSync(settingsFile)) {
+      const content = fs.readFileSync(settingsFile, 'utf-8');
       return JSON.parse(content);
     }
   } catch (error) {
@@ -113,14 +117,15 @@ export function loadSettings(): Partial<AppSettings> {
 
 export function saveSettingsToFile(settings: Partial<AppSettings>): void {
   try {
-    const dir = path.dirname(SETTINGS_FILE);
+    const settingsFile = getSettingsFile();
+    const dir = path.dirname(settingsFile);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     // Merge with existing settings to preserve other values
     const existing = loadSettings();
     const merged = { ...existing, ...settings };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2));
+    fs.writeFileSync(settingsFile, JSON.stringify(merged, null, 2));
   } catch (error) {
     console.error('Failed to save settings:', error);
     throw error;
@@ -482,7 +487,7 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('display:getDisplays', async () => {
     try {
       // Use app root so scripts are found in dev (source) and prod (packaged)
-      const scriptPath = toWindowsPath(path.join(app.getAppPath(), 'scripts', 'getDisplays.ps1'));
+      const scriptPath = toWindowsPath(path.join(getRuntimePaths().appRoot, 'scripts', 'getDisplays.ps1'));
       const { stdout, stderr } = await execAsync(
         `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}"`
       );
@@ -506,7 +511,7 @@ export function setupIpcHandlers(): void {
   // Change display resolution
   ipcMain.handle('display:setResolution', async (_, deviceName: string, width: number, height: number) => {
     try {
-      const scriptPath = toWindowsPath(path.join(app.getAppPath(), 'scripts', 'setResolution.ps1'));
+      const scriptPath = toWindowsPath(path.join(getRuntimePaths().appRoot, 'scripts', 'setResolution.ps1'));
       const { stdout, stderr } = await execAsync(
         `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -DeviceName "${deviceName}" -Width ${width} -Height ${height}`
       );

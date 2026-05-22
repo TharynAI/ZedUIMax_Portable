@@ -309,7 +309,7 @@ function ProEngTab() {
     showConfirmDialog({
       title: count > 1 ? 'Delete ProEng Sessions' : 'Delete ProEng Session',
       message: `Are you sure you want to permanently delete ${count} ProEng session${count > 1 ? 's' : ''}?`,
-      detail: 'This removes the session.json and active-prompt.md files from resources/proeng/sessions.',
+      detail: 'This removes the session.json and active-prompt.md files from the portable ProEng data folder.',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       isDangerous: true,

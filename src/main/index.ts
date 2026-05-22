@@ -2,9 +2,20 @@ import { app, BrowserWindow, ipcMain, shell, clipboard, screen, Menu } from 'ele
 import path from 'path';
 import { setupIpcHandlers, loadSettings, saveSettingsToFile } from './ipc-handlers';
 import { initDb } from './metadata-db';
+import { ensureRuntimeWritableDirs, initializeRuntimePaths } from './runtime-paths';
 
 let mainWindow: BrowserWindow | null = null;
 let isAppClosing = false;
+
+const runtimePaths = initializeRuntimePaths({
+  appPath: app.getAppPath(),
+  cwd: process.cwd(),
+  dirname: __dirname,
+  execPath: process.execPath,
+  isPackaged: app.isPackaged,
+});
+ensureRuntimeWritableDirs(runtimePaths);
+app.setPath('userData', runtimePaths.userDataDir);
 
 /* START> Tharyn | ZedUI WindowBounds
     2026-01-02

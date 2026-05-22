@@ -30,11 +30,6 @@ export const CURSOR_BINARY = '/root/.local/bin/cursor-agent';
 export const CLAUDE_BINARY = '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude';
 export const MCP_CONFIG = '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json';
 
-// ZedUI paths - Windows vs WSL
-export const ZEDUI_DIR = isWindows ? 'E:\\ZedBang\\ZedUIMax' : '/mnt/e/ZedBang/ZedUIMax';
-export const DATA_DIR = path.join(ZEDUI_DIR, 'data');
-export const DB_PATH = path.join(DATA_DIR, 'zedui.db');
-
 // Providers
 /* START> Tharyn | CursorCLI
     2026-05-03

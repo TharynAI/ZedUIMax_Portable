@@ -10,6 +10,7 @@ import {
   setAnnotation,
   toggleFavorite,
 } from './metadata-db';
+import { getRuntimePaths } from './runtime-paths';
 import type {
   CreateProEngSessionInput,
   ProEngDefaultsConfig,
@@ -23,16 +24,6 @@ import type {
 } from '../shared/proeng';
 
 const isWindows = process.platform === 'win32';
-const ZEDUI_ROOT = isWindows ? 'E:\\ZedBang\\ZedUIMax' : '/mnt/e/ZedBang/ZedUIMax';
-const PROENG_ROOT = path.join(ZEDUI_ROOT, 'resources', 'proeng');
-const PROENG_CONFIG_DIR = path.join(PROENG_ROOT, 'config');
-const PROENG_STARTER_DIR = path.join(PROENG_CONFIG_DIR, 'starter-prompts');
-const PROENG_SCRIPTS_DIR = path.join(PROENG_ROOT, 'scripts');
-const PROENG_TEMPLATES_DIR = path.join(PROENG_ROOT, 'templates');
-const PROENG_SESSIONS_DIR = path.join(PROENG_ROOT, 'sessions');
-const PROVIDER_DEFAULTS_FILE = path.join(PROENG_CONFIG_DIR, 'provider-defaults.json');
-const GENERIC_STARTER_PROMPT_FILE = path.join(PROENG_STARTER_DIR, 'generic.md');
-const PROENG_LLM_BRIDGE_FILE = path.join(PROENG_SCRIPTS_DIR, 'proeng_llm.py');
 const MAX_HISTORY_MESSAGES = 6;
 
 const DEFAULTS: ProEngDefaultsConfig = {
@@ -86,14 +77,10 @@ function ensureFile(filePath: string, contents: string) {
 }
 
 function ensureProEngLayout() {
-  ensureDir(PROENG_ROOT);
-  ensureDir(PROENG_CONFIG_DIR);
-  ensureDir(PROENG_STARTER_DIR);
-  ensureDir(PROENG_SCRIPTS_DIR);
-  ensureDir(PROENG_TEMPLATES_DIR);
-  ensureDir(PROENG_SESSIONS_DIR);
-  ensureFile(PROVIDER_DEFAULTS_FILE, JSON.stringify(DEFAULTS, null, 2));
-  ensureFile(GENERIC_STARTER_PROMPT_FILE, GENERIC_STARTER_PROMPT);
+  const paths = getRuntimePaths();
+  ensureDir(paths.mutableProEngRoot);
+  ensureDir(paths.proEngTemplatesDir);
+  ensureDir(paths.proEngSessionsDir);
 }
 
 function readJson<T>(filePath: string): T {
@@ -109,7 +96,7 @@ function normalizeType(type: string) {
 }
 
 function getSessionFolder(sessionId: string) {
-  return path.join(PROENG_SESSIONS_DIR, sessionId.replace(/^proeng:/, ''));
+  return path.join(getRuntimePaths().proEngSessionsDir, sessionId.replace(/^proeng:/, ''));
 }
 
 function getSessionJsonPath(sessionId: string) {
@@ -210,9 +197,10 @@ function readSessionRecord(sessionId: string): ProEngSessionRecord | null {
 
 function readAllSessionRecords() {
   ensureProEngLayout();
-  const sessionDirs = fs.readdirSync(PROENG_SESSIONS_DIR, { withFileTypes: true })
+  const { proEngSessionsDir } = getRuntimePaths();
+  const sessionDirs = fs.readdirSync(proEngSessionsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(PROENG_SESSIONS_DIR, entry.name));
+    .map((entry) => path.join(proEngSessionsDir, entry.name));
 
   return sessionDirs
     .map((dirPath) => {
@@ -229,7 +217,10 @@ function readAllSessionRecords() {
 
 function resolveDefaults() {
   ensureProEngLayout();
-  const savedDefaults = readJson<ProEngDefaultsConfig>(PROVIDER_DEFAULTS_FILE);
+  const { proEngDefaultsFile } = getRuntimePaths();
+  const savedDefaults = fs.existsSync(proEngDefaultsFile)
+    ? readJson<ProEngDefaultsConfig>(proEngDefaultsFile)
+    : DEFAULTS;
   return {
     defaultModels: {
       ...DEFAULTS.defaultModels,
@@ -248,7 +239,10 @@ function resolveDefaults() {
 
 function getStarterPrompt() {
   ensureProEngLayout();
-  return fs.readFileSync(GENERIC_STARTER_PROMPT_FILE, 'utf-8');
+  const { proEngStarterPromptFile } = getRuntimePaths();
+  return fs.existsSync(proEngStarterPromptFile)
+    ? fs.readFileSync(proEngStarterPromptFile, 'utf-8')
+    : GENERIC_STARTER_PROMPT;
 }
 
 function toWslPath(filePath: string) {
@@ -347,9 +341,10 @@ function runProEngBridge(payload: {
 }) {
   return new Promise<ProEngLlmBridgeResponse>((resolve, reject) => {
     const command = isWindows ? 'wsl.exe' : 'python3';
+    const { proEngBridgeFile } = getRuntimePaths();
     const args = isWindows
-      ? ['bash', '-lc', `python3 '${toWslPath(PROENG_LLM_BRIDGE_FILE).replace(/'/g, `'\\''`)}'`]
-      : [PROENG_LLM_BRIDGE_FILE];
+      ? ['bash', '-lc', `python3 '${toWslPath(proEngBridgeFile).replace(/'/g, `'\\''`)}'`]
+      : [proEngBridgeFile];
 
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -450,12 +445,13 @@ function buildInitialInstruction(input: CreateProEngSessionInput) {
 }
 
 export function getProEngDefaults() {
+  const paths = getRuntimePaths();
   return {
     ...resolveDefaults(),
-    starterPromptPath: GENERIC_STARTER_PROMPT_FILE,
+    starterPromptPath: paths.proEngStarterPromptFile,
     starterPrompt: getStarterPrompt(),
-    templatesDirectory: PROENG_TEMPLATES_DIR,
-    sessionsDirectory: PROENG_SESSIONS_DIR,
+    templatesDirectory: paths.proEngTemplatesDir,
+    sessionsDirectory: paths.proEngSessionsDir,
   };
 }
 
@@ -508,7 +504,7 @@ export async function createProEngSession(input: CreateProEngSessionInput) {
     isFavorite: false,
     autoSummary: buildAutoSummary(input),
     userSummary: '',
-    starterPromptPath: GENERIC_STARTER_PROMPT_FILE,
+    starterPromptPath: getRuntimePaths().proEngStarterPromptFile,
     activePromptPath,
     debugCaptureEnabled: false,
     chatMode: 'clean',
@@ -628,7 +624,7 @@ export function saveProEngPromptTemplate(input: SavePromptTemplateInput) {
   }
 
   const defaultFileName = `${session.session.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'proeng-template'}.md`;
-  const targetFilePath = input.filePath || path.join(PROENG_TEMPLATES_DIR, defaultFileName);
+  const targetFilePath = input.filePath || path.join(getRuntimePaths().proEngTemplatesDir, defaultFileName);
   ensureDir(path.dirname(targetFilePath));
   fs.copyFileSync(session.record.activePromptPath, targetFilePath);
   return { filePath: targetFilePath };
