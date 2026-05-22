@@ -8,6 +8,15 @@ import type {
   SendProEngMessageInput,
   UpdateProEngSessionInput,
 } from '../shared/proeng';
+import type {
+  PortableDiagnosticsReport,
+  PortableProviderConfig,
+  PortableProviderKey,
+  PortableSetupStatus,
+  PortableWslDistroInfo,
+  ProviderDefaultsDetection,
+  ProviderTestResult,
+} from '../shared/portable-config';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -101,6 +110,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSettings: (settings: any) =>
     ipcRenderer.invoke('settings:save', settings),
   // <END | Sphere -> Tharyn | CC
+
+  // Portable setup operations
+  getSetupStatus: () =>
+    ipcRenderer.invoke('setup:getStatus'),
+  savePortableConfig: (config: PortableProviderConfig) =>
+    ipcRenderer.invoke('setup:saveConfig', config),
+  detectWslDistros: () =>
+    ipcRenderer.invoke('setup:detectWslDistros'),
+  detectProviderDefaults: () =>
+    ipcRenderer.invoke('setup:detectProviderDefaults'),
+  testProvider: (provider: PortableProviderKey) =>
+    ipcRenderer.invoke('setup:testProvider', provider),
+  runSetupDiagnostics: () =>
+    ipcRenderer.invoke('setup:runDiagnostics'),
 
   /* START> 2025-12-02 | Sphere -> Tharyn | CC
   * Phase 3: Session Message Search API
@@ -218,6 +241,12 @@ export type ElectronAPI = {
   showInFolder: (filePath: string) => Promise<void>;
   getSettings: () => Promise<any>;
   saveSettings: (settings: any) => Promise<boolean>;
+  getSetupStatus: () => Promise<PortableSetupStatus>;
+  savePortableConfig: (config: PortableProviderConfig) => Promise<PortableSetupStatus>;
+  detectWslDistros: () => Promise<PortableWslDistroInfo[]>;
+  detectProviderDefaults: () => Promise<ProviderDefaultsDetection>;
+  testProvider: (provider: PortableProviderKey) => Promise<ProviderTestResult>;
+  runSetupDiagnostics: () => Promise<PortableDiagnosticsReport>;
   searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[]) => Promise<any[]>;
   /* START> 2025-12-08 | Sphere -> Tharyn | CC */
   relocateSession: (sessionId: string, newCwd: string) => Promise<{

@@ -35,6 +35,14 @@ import {
 } from './metadata-db';
 import { continueSession, newSession, branchSession } from './launcher';
 import { relocateSession, directoryExists } from './session-relocator';
+import {
+  buildPortableSetupStatus,
+  detectProviderDefaults,
+  detectWslDistros,
+  normalizePortableConfig,
+  runPortableDiagnostics,
+  testProvider,
+} from './portable-config';
 import { getRuntimePaths } from './runtime-paths';
 import {
   createProEngSession,
@@ -55,6 +63,7 @@ import type {
   SendProEngMessageInput,
   UpdateProEngSessionInput,
 } from '../shared/proeng';
+import type { PortableProviderConfig, PortableProviderKey } from '../shared/portable-config';
 
 function toWindowsPath(p: string): string {
   const m = p.match(/^\/mnt\/([a-zA-Z])\/(.*)$/);
@@ -99,6 +108,7 @@ interface AppSettings {
     width: number;
     height: number;
   };
+  portableConfig?: PortableProviderConfig;
 }
 // <END Tharyn | ZedUI WindowBounds
 
@@ -107,12 +117,16 @@ export function loadSettings(): Partial<AppSettings> {
     const settingsFile = getSettingsFile();
     if (fs.existsSync(settingsFile)) {
       const content = fs.readFileSync(settingsFile, 'utf-8');
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      return {
+        ...parsed,
+        portableConfig: normalizePortableConfig(parsed.portableConfig),
+      };
     }
   } catch (error) {
     console.error('Failed to load settings:', error);
   }
-  return {};
+  return { portableConfig: normalizePortableConfig(undefined) };
 }
 
 export function saveSettingsToFile(settings: Partial<AppSettings>): void {
@@ -124,7 +138,11 @@ export function saveSettingsToFile(settings: Partial<AppSettings>): void {
     }
     // Merge with existing settings to preserve other values
     const existing = loadSettings();
-    const merged = { ...existing, ...settings };
+    const merged = {
+      ...existing,
+      ...settings,
+      portableConfig: normalizePortableConfig(settings.portableConfig || existing.portableConfig),
+    };
     fs.writeFileSync(settingsFile, JSON.stringify(merged, null, 2));
   } catch (error) {
     console.error('Failed to save settings:', error);
@@ -374,6 +392,40 @@ export function setupIpcHandlers(): void {
     return true;
   });
   // <END | Sphere -> Tharyn | CC
+
+  /* START> Tharyn | PortableInstall
+      2026-05-22
+      What: Setup status/config IPC foundation
+      Why: Portable setup UI needs main-process-owned normalized paths and provider state
+      Expected: Renderer can read setup status and save a versioned portableConfig without touching launch code yet
+  */
+  ipcMain.handle('setup:getStatus', async () => {
+    return buildPortableSetupStatus(loadSettings() as Record<string, any>);
+  });
+
+  ipcMain.handle('setup:saveConfig', async (_, config: PortableProviderConfig) => {
+    saveSettingsToFile({ portableConfig: normalizePortableConfig(config) });
+    return buildPortableSetupStatus(loadSettings() as Record<string, any>);
+  });
+
+  ipcMain.handle('setup:detectWslDistros', async () => {
+    return detectWslDistros();
+  });
+
+  ipcMain.handle('setup:detectProviderDefaults', async () => {
+    const detection = await detectProviderDefaults((loadSettings() as Record<string, any>).portableConfig);
+    saveSettingsToFile({ portableConfig: detection.config });
+    return detection;
+  });
+
+  ipcMain.handle('setup:testProvider', async (_, provider: PortableProviderKey) => {
+    return testProvider((loadSettings() as Record<string, any>).portableConfig, provider);
+  });
+
+  ipcMain.handle('setup:runDiagnostics', async () => {
+    return runPortableDiagnostics(loadSettings() as Record<string, any>);
+  });
+  // <END Tharyn | PortableInstall
 
   /* START> 2025-12-02 | Sphere -> Tharyn | CC
   * Phase 3: Session Message Search IPC handler

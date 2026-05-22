@@ -7,6 +7,15 @@ import type {
   SendProEngMessageInput,
   UpdateProEngSessionInput,
 } from '../../shared/proeng';
+import type {
+  PortableDiagnosticsReport,
+  PortableProviderConfig,
+  PortableProviderKey,
+  PortableSetupStatus,
+  PortableWslDistroInfo,
+  ProviderDefaultsDetection,
+  ProviderTestResult,
+} from '../../shared/portable-config';
 
 // Type declaration for Electron API exposed via preload
 export interface ElectronAPI {
@@ -63,6 +72,12 @@ export interface ElectronAPI {
   toWindowsPath: (wslPath: string) => Promise<string>;
   getSettings: () => Promise<any>;
   saveSettings: (settings: any) => Promise<boolean>;
+  getSetupStatus: () => Promise<PortableSetupStatus>;
+  savePortableConfig: (config: PortableProviderConfig) => Promise<PortableSetupStatus>;
+  detectWslDistros: () => Promise<PortableWslDistroInfo[]>;
+  detectProviderDefaults: () => Promise<ProviderDefaultsDetection>;
+  testProvider: (provider: PortableProviderKey) => Promise<ProviderTestResult>;
+  runSetupDiagnostics: () => Promise<PortableDiagnosticsReport>;
   getDisplays: () => Promise<any>;
   setResolution: (deviceName: string, width: number, height: number) => Promise<any>;
   launchAssistant: (launcherId: string, mode: 'new' | 'resume', workspace?: string) => Promise<{ success: boolean; error?: string }>;

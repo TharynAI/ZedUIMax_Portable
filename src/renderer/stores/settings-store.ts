@@ -3,6 +3,7 @@
  */
 
 import { create } from 'zustand';
+import type { PortableProviderConfig } from '../../shared/portable-config';
 
 export interface AppSettings {
   // Display settings
@@ -60,6 +61,8 @@ export interface AppSettings {
   */
   providerFilter?: 'all' | 'claude' | 'codex' | 'cursor';
   // <END Tharyn | CursorCLI
+
+  portableConfig?: PortableProviderConfig;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
