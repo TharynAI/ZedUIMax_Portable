@@ -1,28 +1,36 @@
-param()
+param(
+    [switch]$NoInstall,
+    [switch]$NoBuild,
+    [switch]$RebuildNative,
+    [switch]$NoKill,
+    [switch]$NoDebug,
+    [int]$DebugPort = 9223
+)
 
 $ErrorActionPreference = 'Stop'
 
-function Get-LauncherLogPath {
-    $candidates = @(
-        $env:TEMP,
-        $env:TMP,
-        [System.IO.Path]::GetTempPath(),
-        'C:\Windows\Temp'
-    ) | Select-Object -Unique
-
-    foreach ($dir in $candidates) {
-        if ([string]::IsNullOrWhiteSpace($dir)) {
-            continue
-        }
-        if (Test-Path $dir) {
-            return Join-Path $dir 'zeduimax-launcher.log'
-        }
+function Resolve-ProjectRoot {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    $root = Split-Path -Parent $scriptDir
+    $packageJson = Join-Path $root 'package.json'
+    if (-not (Test-Path -LiteralPath $packageJson)) {
+        throw "ZedUIMax package.json not found at $packageJson. Keep this launcher inside _Launcher under the app root."
     }
-
-    return 'C:\zeduimax-launcher.log'
+    return $root
 }
 
-$logPath = Get-LauncherLogPath
+function Ensure-Directory {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+}
+
+$projectRoot = Resolve-ProjectRoot
+$dataRoot = Join-Path $projectRoot 'data'
+$logsRoot = Join-Path $dataRoot 'logs'
+Ensure-Directory -Path $logsRoot
+$logPath = Join-Path $logsRoot 'launcher.log'
 
 function Write-LauncherLog {
     param([string]$Message)
@@ -30,142 +38,46 @@ function Write-LauncherLog {
     Add-Content -Path $logPath -Value $line -Encoding UTF8
 }
 
+function ConvertTo-ProcessArgument {
+    param([AllowNull()][string]$Value)
+    if ($null -eq $Value) {
+        return '""'
+    }
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+    return '"' + ($Value -replace '"', '\"') + '"'
+}
+
 function Show-LauncherError {
+    param([string]$Message)
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            "$Message`n`nLog: $logPath",
+            'ZedUIMax Portable Launcher',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    } catch {
+        Write-Error "$Message`nLog: $logPath"
+    }
+}
+
+function Invoke-LoggedProcess {
     param(
-        [string]$Message,
-        [string]$LogPath
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory,
+        [string]$Label
     )
 
-    Add-Type -AssemblyName System.Windows.Forms
-    $detail = $Message
-    if ($LogPath) {
-        $detail += "`n`nLog: $LogPath"
-    }
-
-    [System.Windows.Forms.MessageBox]::Show(
-        $detail,
-        "ZedUIMax Launcher Error",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Error
-    ) | Out-Null
-}
-
-function Get-ZedUIMaxRoot {
-    param([string]$ScriptDir)
-    $fromScript = Split-Path -Parent $ScriptDir
-    $candidates = @(
-        $fromScript,
-        'E:\ZedBang\ZedUIMax',
-        'D:\ZedBang\ZedUIMax',
-        'C:\ZedBang\ZedUIMax'
-    ) | Select-Object -Unique
-
-    foreach ($candidate in $candidates) {
-        if ([string]::IsNullOrWhiteSpace($candidate)) {
-            continue
-        }
-        if (Test-Path (Join-Path $candidate 'package.json')) {
-            return $candidate
-        }
-    }
-
-    throw "ZedUIMax install path not found. Checked: $($candidates -join ', ')"
-}
-
-function Find-WindowsElectron {
-    param([string]$ProjectWinPath)
-    $siblingRoot = Split-Path -Parent $ProjectWinPath
-    $candidates = @(
-        (Join-Path $ProjectWinPath 'node_modules\electron\dist\electron.exe'),
-        (Join-Path $siblingRoot 'ZedUI\node_modules\electron\dist\electron.exe')
-    ) | Select-Object -Unique
-
-    foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) {
-            return $candidate
-        }
-    }
-    return $null
-}
-
-function Reset-WindowBounds {
-    param([string]$ProjectWinPath)
-    $settingsPath = Join-Path $ProjectWinPath 'data\settings.json'
-    if (-not (Test-Path $settingsPath)) {
-        return
-    }
-
-    try {
-        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-        $settings.windowBounds = [pscustomobject]@{
-            x = 120
-            y = 80
-            width = 1497
-            height = 1001
-        }
-        $settingsJson = $settings | ConvertTo-Json -Depth 20
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($settingsPath, $settingsJson, $utf8NoBom)
-        Write-LauncherLog "Window bounds reset in $settingsPath"
-    } catch {
-        Write-LauncherLog "Window bounds reset skipped: $($_.Exception.Message)"
-    }
-}
-
-function Stop-StaleZedUIMaxWindowsInstances {
-    param([string]$ProjectWinPath)
-    $all = Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" -ErrorAction SilentlyContinue
-    if (-not $all) {
-        return
-    }
-
-    $killed = 0
-    foreach ($proc in $all) {
-        if ($proc.CommandLine -and $proc.CommandLine.IndexOf($ProjectWinPath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-            try {
-                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-                $killed++
-            } catch {
-                Write-LauncherLog "Unable to stop stale process $($proc.ProcessId): $($_.Exception.Message)"
-            }
-        }
-    }
-
-    if ($killed -gt 0) {
-        Write-LauncherLog "Stopped $killed stale ZedUIMax Windows process(es)"
-    }
-}
-
-function Get-ElectronVersion {
-    param([string]$ProjectWinPath)
-    $electronPackage = Join-Path $ProjectWinPath 'node_modules\electron\package.json'
-    if (-not (Test-Path $electronPackage)) {
-        throw "Electron package metadata not found at $electronPackage"
-    }
-
-    $pkg = Get-Content -Path $electronPackage -Raw | ConvertFrom-Json
-    if ([string]::IsNullOrWhiteSpace($pkg.version)) {
-        throw "Unable to determine Electron version from $electronPackage"
-    }
-
-    return [string]$pkg.version
-}
-
-function Ensure-ElectronNativeModules {
-    param([string]$ProjectWinPath)
-
-    $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if (-not $npm) {
-        throw "npm.cmd not found on PATH; cannot prepare Electron native modules."
-    }
-
-    $electronVersion = Get-ElectronVersion -ProjectWinPath $ProjectWinPath
-    Write-LauncherLog "Ensuring better-sqlite3 is rebuilt for Electron $electronVersion"
+    Write-LauncherLog "$Label`: $FilePath $($Arguments -join ' ')"
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $npm.Source
-    $psi.Arguments = "rebuild better-sqlite3 --runtime=electron --target=$electronVersion --disturl=https://electronjs.org/headers"
-    $psi.WorkingDirectory = $ProjectWinPath
+    $psi.FileName = $FilePath
+    $psi.Arguments = (($Arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join ' ')
+    $psi.WorkingDirectory = $WorkingDirectory
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -177,95 +89,143 @@ function Ensure-ElectronNativeModules {
     $proc.WaitForExit()
 
     if ($stdout.Trim()) {
-        Write-LauncherLog "native rebuild stdout: $($stdout.Trim())"
+        Write-LauncherLog "$Label stdout: $($stdout.Trim())"
     }
     if ($stderr.Trim()) {
-        Write-LauncherLog "native rebuild stderr: $($stderr.Trim())"
+        Write-LauncherLog "$Label stderr: $($stderr.Trim())"
     }
     if ($proc.ExitCode -ne 0) {
-        throw "Electron native module rebuild failed with exit code $($proc.ExitCode)."
+        throw "$Label failed with exit code $($proc.ExitCode)."
     }
 }
 
-function Set-ContextMenuCommandScope {
-    param(
-        [string]$ScopePrefix,
-        [string]$LaunchCommand
-    )
-
-    if ($ScopePrefix -eq 'HKLM') {
-        $basePath = 'HKLM\SOFTWARE\Classes'
-    } else {
-        $basePath = 'HKCU\Software\Classes'
+function Get-CommandPath {
+    param([string]$Name)
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        throw "$Name was not found on PATH."
     }
-
-    $bgKey = "$basePath\Directory\Background\shell\ZedUIMax_Sessions"
-    $bgCmdKey = "$bgKey\command"
-    $folderKey = "$basePath\Directory\shell\ZedUIMax_Sessions"
-    $folderCmdKey = "$folderKey\command"
-
-    & reg.exe add $bgKey /ve /d "ZedUIMax Sessions" /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write $bgKey" }
-    & reg.exe add $bgKey /v Icon /t REG_SZ /d "shell32.dll,294" /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write icon for $bgKey" }
-    & reg.exe add $bgCmdKey /ve /d $LaunchCommand /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write command for $bgCmdKey" }
-
-    & reg.exe add $folderKey /ve /d "ZedUIMax Sessions" /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write $folderKey" }
-    & reg.exe add $folderKey /v Icon /t REG_SZ /d "shell32.dll,294" /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write icon for $folderKey" }
-    & reg.exe add $folderCmdKey /ve /d $LaunchCommand /f 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to write command for $folderCmdKey" }
+    return $cmd.Source
 }
 
-function Ensure-ContextMenuRegistry {
-    param([string]$VbsPath)
-    $launchCommand = "wscript.exe //B //nologo `"$VbsPath`""
+function Get-ElectronVersion {
+    $electronPackage = Join-Path $projectRoot 'node_modules\electron\package.json'
+    if (-not (Test-Path -LiteralPath $electronPackage)) {
+        throw "Electron package metadata not found at $electronPackage."
+    }
+    $pkg = Get-Content -Path $electronPackage -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace($pkg.version)) {
+        throw "Unable to determine Electron version from $electronPackage."
+    }
+    return [string]$pkg.version
+}
 
-    $updatedAny = $false
-    foreach ($scope in @('HKLM', 'HKCU')) {
-        try {
-            Set-ContextMenuCommandScope -ScopePrefix $scope -LaunchCommand $launchCommand
-            Write-LauncherLog "Context-menu entries ensured in $scope"
-            $updatedAny = $true
-        } catch {
-            Write-LauncherLog "Context-menu update failed for ${scope}: $($_.Exception.Message)"
+function Ensure-Dependencies {
+    $nodeModules = Join-Path $projectRoot 'node_modules'
+    if (Test-Path -LiteralPath $nodeModules) {
+        return
+    }
+    if ($NoInstall) {
+        throw "node_modules is missing. Run this launcher without -NoInstall, or run npm ci in $projectRoot."
+    }
+    $npm = Get-CommandPath -Name 'npm.cmd'
+    Invoke-LoggedProcess -FilePath $npm -Arguments @('ci') -WorkingDirectory $projectRoot -Label 'npm ci'
+}
+
+function Ensure-NativeModules {
+    $npm = Get-CommandPath -Name 'npm.cmd'
+    $electronVersion = Get-ElectronVersion
+    $markerPath = Join-Path $dataRoot 'native-rebuild.json'
+    $needsRebuild = [bool]$RebuildNative
+
+    if (-not $needsRebuild) {
+        if (-not (Test-Path -LiteralPath $markerPath)) {
+            $needsRebuild = $true
+        } else {
+            try {
+                $marker = Get-Content -Path $markerPath -Raw | ConvertFrom-Json
+                $needsRebuild = ([string]$marker.electronVersion -ne $electronVersion)
+            } catch {
+                $needsRebuild = $true
+            }
         }
     }
 
-    if (-not $updatedAny) {
-        Write-LauncherLog "Context-menu self-heal skipped (insufficient registry write rights)"
+    if (-not $needsRebuild) {
+        Write-LauncherLog "Native rebuild marker is current for Electron $electronVersion"
+        return
+    }
+
+    Invoke-LoggedProcess `
+        -FilePath $npm `
+        -Arguments @('rebuild', 'better-sqlite3', '--runtime=electron', "--target=$electronVersion", '--disturl=https://electronjs.org/headers') `
+        -WorkingDirectory $projectRoot `
+        -Label "npm rebuild better-sqlite3"
+
+    $marker = [pscustomobject]@{
+        electronVersion = $electronVersion
+        rebuiltAt = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    $marker | ConvertTo-Json | Set-Content -Path $markerPath -Encoding UTF8
+}
+
+function Ensure-BuildOutput {
+    $mainFile = Join-Path $projectRoot 'dist\main\main\index.js'
+    $rendererFile = Join-Path $projectRoot 'dist\renderer\index.html'
+    if ((Test-Path -LiteralPath $mainFile) -and (Test-Path -LiteralPath $rendererFile)) {
+        return
+    }
+    if ($NoBuild) {
+        throw "Build output is missing. Run this launcher without -NoBuild, or run npm run build in $projectRoot."
+    }
+    $npm = Get-CommandPath -Name 'npm.cmd'
+    Invoke-LoggedProcess -FilePath $npm -Arguments @('run', 'build') -WorkingDirectory $projectRoot -Label 'npm run build'
+}
+
+function Stop-CurrentRootElectron {
+    if ($NoKill) {
+        return
+    }
+    $all = Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" -ErrorAction SilentlyContinue
+    if (-not $all) {
+        return
+    }
+
+    $stopped = 0
+    foreach ($proc in $all) {
+        if ($proc.CommandLine -and $proc.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+            $stopped++
+        }
+    }
+    if ($stopped -gt 0) {
+        Write-LauncherLog "Stopped $stopped existing Electron process(es) for $projectRoot"
     }
 }
 
 try {
-    if (Test-Path $logPath) {
-        Remove-Item -Path $logPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $logPath) {
+        Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
     }
 
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    $projectWinPath = Get-ZedUIMaxRoot -ScriptDir $scriptDir
-    $vbsPath = Join-Path $scriptDir 'zeduimax-launcher.vbs'
+    Write-LauncherLog "Project root: $projectRoot"
+    Ensure-Dependencies
+    Ensure-NativeModules
+    Ensure-BuildOutput
+    Stop-CurrentRootElectron
 
-    Write-LauncherLog "Launcher script directory: $scriptDir"
-    Write-LauncherLog "Resolved project path: $projectWinPath"
-
-    Ensure-ContextMenuRegistry -VbsPath $vbsPath
-    Stop-StaleZedUIMaxWindowsInstances -ProjectWinPath $projectWinPath
-    Ensure-ElectronNativeModules -ProjectWinPath $projectWinPath
-    Reset-WindowBounds -ProjectWinPath $projectWinPath
-
-    $electronExe = Find-WindowsElectron -ProjectWinPath $projectWinPath
-    if (-not $electronExe) {
-        throw "Windows Electron runtime not found. Checked ZedUIMax and sibling ZedUI paths."
+    $electronExe = Join-Path $projectRoot 'node_modules\electron\dist\electron.exe'
+    if (-not (Test-Path -LiteralPath $electronExe)) {
+        throw "Electron runtime not found at $electronExe."
     }
 
-    Write-LauncherLog "Launching with Windows Electron: $electronExe"
-    $proc = Start-Process -FilePath $electronExe `
-        -ArgumentList @('.', '--no-sandbox', '--remote-debugging-port=9223', '--disable-gpu') `
-        -WorkingDirectory $projectWinPath `
-        -PassThru
+    $args = @('.', '--no-sandbox', '--disable-gpu')
+    if (-not $NoDebug) {
+        $args += "--remote-debugging-port=$DebugPort"
+    }
+
+    Write-LauncherLog "Launching: $electronExe $($args -join ' ')"
+    $proc = Start-Process -FilePath $electronExe -ArgumentList $args -WorkingDirectory $projectRoot -PassThru
 
     Start-Sleep -Milliseconds 900
     $running = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
@@ -274,15 +234,17 @@ try {
     }
 
     Write-LauncherLog "Launch succeeded with PID $($proc.Id)"
+    Write-Host "ZedUIMax Portable launched from $projectRoot with PID $($proc.Id)."
+    Write-Host "Log: $logPath"
 } catch {
     $msg = $_.Exception.Message
-    if (Test-Path $logPath) {
+    if (Test-Path -LiteralPath $logPath) {
         $tail = Get-Content -Path $logPath -Tail 40 -ErrorAction SilentlyContinue
         if ($tail) {
             $msg += "`n`nRecent output:`n" + ($tail -join "`n")
         }
     }
-    Show-LauncherError -Message $msg -LogPath $logPath
+    Show-LauncherError -Message $msg
     exit 1
 }
 
