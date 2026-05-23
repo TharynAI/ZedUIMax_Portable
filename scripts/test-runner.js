@@ -21,11 +21,11 @@ const WebSocket = require('ws');
 
 /* START> Tharyn | CursorCLI
     2026-05-04
-    What: Update CDP debug port from 9222 to 9223 (OD-4 canonical port)
-    Why: _Launcher scripts and agent-protocol.json all use 9223; package.json + this file were stale
-    Expected: `npm run test:ui` connects to running app on port 9223 without "cannot connect" errors
+    What: Use the portable CDP debug port by default while allowing an env override
+    Why: The portable app can coexist with the active local app without fighting over port 9223
+    Expected: `npm run test:ui` connects to the portable app on port 9233 unless ZEDUI_CDP_PORT is set
 */
-const DEBUG_PORT = 9223;
+const DEBUG_PORT = Number(process.env.ZEDUI_CDP_PORT || 9233);
 // <END Tharyn | CursorCLI
 
 /**
@@ -44,7 +44,7 @@ async function getDebuggerUrl() {
           if (pageTarget && pageTarget.webSocketDebuggerUrl) {
             resolve(pageTarget.webSocketDebuggerUrl);
           } else {
-            reject(new Error('No page target found. Is ZedUI running with --remote-debugging-port=9223?'));
+            reject(new Error(`No page target found. Is ZedUI running with --remote-debugging-port=${DEBUG_PORT}?`));
           }
         } catch (e) {
           reject(new Error(`Failed to parse debug targets: ${e.message}`));

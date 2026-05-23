@@ -1,10 +1,11 @@
 // Navigate to View tab and select a session
 const http = require('http');
 const WebSocket = require('ws');
+const DEBUG_PORT = Number(process.env.ZEDUI_CDP_PORT || 9233);
 
 async function getTargets() {
   return new Promise((resolve, reject) => {
-    http.get('http://127.0.0.1:9223/json', res => {
+    http.get(`http://127.0.0.1:${DEBUG_PORT}/json`, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(JSON.parse(data)));

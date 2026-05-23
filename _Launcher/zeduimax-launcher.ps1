@@ -4,7 +4,7 @@ param(
     [switch]$RebuildNative,
     [switch]$NoKill,
     [switch]$NoDebug,
-    [int]$DebugPort = 9223
+    [int]$DebugPort = 9233
 )
 
 $ErrorActionPreference = 'Stop'

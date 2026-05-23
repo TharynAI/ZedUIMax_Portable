@@ -1,7 +1,7 @@
-// Quick CDP runner for port 9223
+// Quick CDP runner for the portable app debug port.
 const http = require('http');
 const WebSocket = require('ws');
-const PORT = 9223;
+const PORT = Number(process.env.ZEDUI_CDP_PORT || 9233);
 
 async function getDebuggerUrl() {
   return new Promise((resolve, reject) => {

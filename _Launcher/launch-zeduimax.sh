@@ -4,7 +4,8 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 LOG_FILE="/tmp/zeduimax-launcher.log"
 SETTINGS_FILE="$APP_DIR/data/settings.json"
-MATCH_PATTERN="$APP_DIR/node_modules/electron/dist/electron \\. --no-sandbox --remote-debugging-port=9223"
+DEBUG_PORT="${ZEDUI_CDP_PORT:-9233}"
+MATCH_PATTERN="$APP_DIR/node_modules/electron/dist/electron \\. --no-sandbox --remote-debugging-port=$DEBUG_PORT"
 
 cd "$APP_DIR"
 
@@ -34,4 +35,4 @@ export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}"
 
 echo "ZedUIMax launching. Log: $LOG_FILE"
-exec "$APP_DIR/node_modules/electron/dist/electron" . --no-sandbox --remote-debugging-port=9223 --disable-gpu >>"$LOG_FILE" 2>&1
+exec "$APP_DIR/node_modules/electron/dist/electron" . --no-sandbox "--remote-debugging-port=$DEBUG_PORT" --disable-gpu >>"$LOG_FILE" 2>&1

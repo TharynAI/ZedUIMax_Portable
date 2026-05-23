@@ -8,7 +8,7 @@
     "dev:vite": "vite",
     "dev:electron": "electron . --no-sandbox --inspect",
     "start": "electron . --no-sandbox",
-    "start:debug": "electron . --no-sandbox --remote-debugging-port=9223",
+    "start:debug": "electron . --no-sandbox --remote-debugging-port=9233",
     "build": "npm run build:electron && npm run build:vite",
     "build:vite": "vite build",
     "build:electron": "node node_modules/typescript/lib/tsc.js -p tsconfig.main.json",
