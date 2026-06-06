@@ -9,6 +9,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Ensure portable Node.js is on PATH (registry PATH changes need new session)
+$portableNode = 'E:\ZedBang\CLI\Tools\node-v22.22.2-win-x64'
+if ((Test-Path -LiteralPath $portableNode) -and ($env:PATH -notlike "*$portableNode*")) {
+    $env:PATH = "$portableNode;$env:PATH"
+}
+
 function Resolve-ProjectRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
     $root = Split-Path -Parent $scriptDir

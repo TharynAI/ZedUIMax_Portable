@@ -166,11 +166,11 @@ export function buildCodexLaunch(mode: 'new' | 'resume', cwd: string, resumeId?:
 
   const wslCwd = toWslPath(cwd);
   const commandArgs = mode === 'resume'
-    ? (resumeId ? [binaryPathWsl, 'resume', '--id', resumeId] : [binaryPathWsl, 'resume'])
+    ? (resumeId ? [binaryPathWsl, 'resume', resumeId] : [binaryPathWsl, 'resume'])
     : [binaryPathWsl];
   const args = wtWslArgs(config, wslCwd, commandArgs);
   const wslShellCommand = mode === 'resume'
-    ? `cd ${wslQuote(wslCwd)} && ${wslQuote(binaryPathWsl)} resume${resumeId ? ` --id ${wslQuote(resumeId)}` : ''}`
+    ? `cd ${wslQuote(wslCwd)} && ${wslQuote(binaryPathWsl)} resume${resumeId ? ` ${wslQuote(resumeId)}` : ''}`
     : `cd ${wslQuote(wslCwd)} && ${wslQuote(binaryPathWsl)}`;
   return {
     command: 'wt.exe',
