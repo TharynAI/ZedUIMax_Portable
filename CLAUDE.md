@@ -45,7 +45,7 @@ Sessions are read from Claude's native storage:
 Project paths use dashes: `/mnt/e/ZedBang` → `-mnt-e-ZedBang`
 
 ### User Annotations (SQLite)
-User metadata stored in: `/mnt/e/ZedBang/ZedUIMax/data/zedui.db`
+User metadata stored in: `E:\ZedBang\CLI\Cust\ZedUIMax_Portable\data\zedui.db`
 
 Tables:
 - `annotations` - User summaries, notes, favorites, types

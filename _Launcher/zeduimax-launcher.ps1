@@ -9,9 +9,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Ensure portable Node.js is on PATH (registry PATH changes need new session)
-$portableNode = 'E:\ZedBang\CLI\Tools\node-v22.22.2-win-x64'
-if ((Test-Path -LiteralPath $portableNode) -and ($env:PATH -notlike "*$portableNode*")) {
+# Ensure optional portable Node.js is on PATH (registry PATH changes need new session)
+$portableNode = if ($env:ZEDUI_PORTABLE_NODE_DIR) {
+    $env:ZEDUI_PORTABLE_NODE_DIR
+} else {
+    'E:\ZedBang\CLI\Tools\node-v22.22.2-win-x64'
+}
+if ($portableNode -and (Test-Path -LiteralPath $portableNode) -and ($env:PATH -notlike "*$portableNode*")) {
     $env:PATH = "$portableNode;$env:PATH"
 }
 
@@ -126,6 +130,38 @@ function Get-ElectronVersion {
     return [string]$pkg.version
 }
 
+function Test-BetterSqliteNative {
+    $electronExe = Join-Path $projectRoot 'node_modules\electron\dist\electron.exe'
+    if (-not (Test-Path -LiteralPath $electronExe)) {
+        Write-LauncherLog "Native module validation skipped: Electron runtime not found at $electronExe"
+        return $false
+    }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $electronExe
+    $psi.Arguments = '-e "require(''better-sqlite3''); process.exit(0)"'
+    $psi.WorkingDirectory = $projectRoot
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    $psi.EnvironmentVariables['ELECTRON_RUN_AS_NODE'] = '1'
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+
+    if ($stdout.Trim()) {
+        Write-LauncherLog "better-sqlite3 validation stdout: $($stdout.Trim())"
+    }
+    if ($stderr.Trim()) {
+        Write-LauncherLog "better-sqlite3 validation stderr: $($stderr.Trim())"
+    }
+
+    return ($proc.ExitCode -eq 0)
+}
+
 function Ensure-Dependencies {
     $nodeModules = Join-Path $projectRoot 'node_modules'
     if (Test-Path -LiteralPath $nodeModules) {
@@ -158,8 +194,12 @@ function Ensure-NativeModules {
     }
 
     if (-not $needsRebuild) {
-        Write-LauncherLog "Native rebuild marker is current for Electron $electronVersion"
-        return
+        if (Test-BetterSqliteNative) {
+            Write-LauncherLog "Native rebuild marker and better-sqlite3 validation are current for Electron $electronVersion"
+            return
+        }
+        Write-LauncherLog "Native rebuild marker was current for Electron $electronVersion, but better-sqlite3 validation failed. Rebuilding."
+        $needsRebuild = $true
     }
 
     Invoke-LoggedProcess `
@@ -168,8 +208,13 @@ function Ensure-NativeModules {
         -WorkingDirectory $projectRoot `
         -Label "npm rebuild better-sqlite3"
 
+    if (-not (Test-BetterSqliteNative)) {
+        throw "better-sqlite3 still fails to load under Electron $electronVersion after npm rebuild."
+    }
+
     $marker = [pscustomobject]@{
         electronVersion = $electronVersion
+        betterSqlite3Validated = $true
         rebuiltAt = (Get-Date).ToUniversalTime().ToString('o')
     }
     $marker | ConvertTo-Json | Set-Content -Path $markerPath -Encoding UTF8

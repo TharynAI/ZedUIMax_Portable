@@ -15,6 +15,7 @@
     "test": "node test/test-core.js",
     "test:runtime-paths": "node test/test-runtime-paths.js",
     "test:launch-config": "node test/test-launch-config.js",
+    "migrate:local-data": "node scripts/migrate-local-data.js",
     "test:ui": "node scripts/test-runner.js",
     "package": "npm run build && electron-builder",
     "preview": "vite preview"

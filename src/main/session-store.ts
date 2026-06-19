@@ -531,6 +531,7 @@ export function getSessions(
   }
   // <END Tharyn | CursorCLI
 
+  sessions = dedupeSessionsById(sessions);
   sessions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
   return sessions.slice(0, limit);
@@ -895,9 +896,65 @@ function sanitizeSummary(summary: string, firstMessage: string): string {
   return '(No summary)';
 }
 
+function codexRawIdFromFileName(filePath: string): string {
+  const baseName = path.basename(filePath, '.jsonl');
+  const uuidMatch = baseName.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  return uuidMatch ? uuidMatch[1] : baseName;
+}
+
+function getCodexRawSessionId(filePath: string): string {
+  let rawSessionId = codexRawIdFromFileName(filePath);
+
+  try {
+    const lines = readFirstLines(filePath, 120);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        const entryType = entry.type || '';
+        if (entryType === 'session_meta' || entryType === 'meta') {
+          const payload = entry.payload || entry.data || entry;
+          if (typeof payload.id === 'string' && payload.id.trim()) {
+            rawSessionId = payload.id.trim();
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Keep filename-derived fallback.
+  }
+
+  return rawSessionId;
+}
+
+function dedupeSessionsById(sessions: SessionInfo[]): SessionInfo[] {
+  const latestById = new Map<string, SessionInfo>();
+
+  for (const session of sessions) {
+    const existing = latestById.get(session.sessionId);
+    if (!existing) {
+      latestById.set(session.sessionId, session);
+      continue;
+    }
+
+    const sessionTime = session.timestamp?.getTime() || 0;
+    const existingTime = existing.timestamp?.getTime() || 0;
+    if (
+      sessionTime > existingTime ||
+      (sessionTime === existingTime && session.fileSize > existing.fileSize)
+    ) {
+      latestById.set(session.sessionId, session);
+    }
+  }
+
+  return Array.from(latestById.values());
+}
+
 function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | null {
   const providerId: ProviderId = 'codex';
-  let rawSessionId = '';
+  let rawSessionId = getCodexRawSessionId(filePath);
   let autoSummary = '';
   let firstMessage = '';
   let model = '';
@@ -940,10 +997,6 @@ function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | 
       }
     }
 
-    if (!rawSessionId) {
-      rawSessionId = path.basename(filePath, '.jsonl').replace(/^rollout-[0-9]+-/, '');
-    }
-
     // Use file modification time to reflect latest activity (resume/appends)
     timestamp = stat.mtime;
 
@@ -973,7 +1026,7 @@ function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | 
 
 function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDetails | null {
   const providerId: ProviderId = 'codex';
-  let rawSessionId = '';
+  let rawSessionId = getCodexRawSessionId(filePath);
   let autoSummary = '';
   let firstMessage = '';
   let model = '';
@@ -1028,10 +1081,6 @@ function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDeta
       } catch {
         continue;
       }
-    }
-
-    if (!rawSessionId) {
-      rawSessionId = path.basename(filePath, '.jsonl').replace(/^rollout-[0-9]+-/, '');
     }
 
     // Use file modification time to reflect latest activity (resume/appends)
@@ -1093,14 +1142,26 @@ function getCodexSessions(sessionsRoot: string, days: number = DEFAULT_DAYS): Se
 }
 
 function findCodexFileById(rawSessionId: string, sessionsRoot: string): string | null {
-  let found: string | null = null;
-  walkCodexFiles(sessionsRoot, (filePath) => {
-    if (found) return;
-    if (filePath.includes(rawSessionId)) {
-      found = filePath;
+  let foundFilePath: string | null = null;
+  let foundMtime = -1;
+  let foundSize = -1;
+
+  walkCodexFiles(sessionsRoot, (filePath, stat) => {
+    if (getCodexRawSessionId(filePath) === rawSessionId) {
+      const candidateMtime = stat.mtime.getTime();
+      if (
+        !foundFilePath ||
+        candidateMtime > foundMtime ||
+        (candidateMtime === foundMtime && stat.size > foundSize)
+      ) {
+        foundFilePath = filePath;
+        foundMtime = candidateMtime;
+        foundSize = stat.size;
+      }
     }
   });
-  return found;
+
+  return foundFilePath;
 }
 
 function getCodexSessionDetails(rawSessionId: string, sessionsRoot: string): SessionDetails | null {

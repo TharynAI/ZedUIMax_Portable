@@ -33,7 +33,7 @@ A desktop application for managing Claude Code sessions. Browse, organize, tag, 
 ### Step 1: Navigate to ZedUI Directory
 
 ```bash
-cd /mnt/e/ZedBang/ZedUIMax
+cd /mnt/e/ZedBang/CLI/Cust/ZedUIMax_Portable
 ```
 
 ### Step 2: Install Dependencies
@@ -152,14 +152,14 @@ const CLAUDE_BINARY = '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/.bin/claude'
 const MCP_CONFIG = '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json';
 
 // ZedUI data
-const DATA_DIR = '/mnt/e/ZedBang/ZedUIMax/data';
+const DATA_DIR = 'E:\\ZedBang\\CLI\\Cust\\ZedUIMax_Portable\\data';
 ```
 
 ### Database
 
 User annotations are stored in SQLite at:
 ```
-/mnt/e/ZedBang/ZedUIMax/data/zedui.db
+E:\ZedBang\CLI\Cust\ZedUIMax_Portable\data\zedui.db
 ```
 
 This is separate from Claude's session files and survives updates.
@@ -253,7 +253,7 @@ npm rebuild better-sqlite3
 
 Reset the database:
 ```bash
-rm /mnt/e/ZedBang/ZedUIMax/data/zedui.db
+del E:\ZedBang\CLI\Cust\ZedUIMax_Portable\data\zedui.db
 # Restart ZedUI - database recreates automatically
 ```
 
