@@ -46,20 +46,20 @@ function SessionPreview() {
       {/* Metadata */}
       <PreviewMetadata session={selectedSession} />
 
+      {/* Actions */}
+      <PreviewActions session={selectedSession} />
+
       {/* Working Directory */}
       <PreviewWorkingDirectory session={selectedSession} />
 
       {/* Summary */}
       <PreviewSummary session={selectedSession} />
 
-      {/* Tags */}
-      <PreviewTags session={selectedSession} />
-
       {/* Notes */}
       <PreviewNotes session={selectedSession} />
 
-      {/* Actions */}
-      <PreviewActions session={selectedSession} />
+      {/* Tags */}
+      <PreviewTags session={selectedSession} />
     </div>
   );
 }
@@ -366,7 +366,7 @@ function PreviewTags({ session }: { session: any }) {
 
   return (
     <div className="browse-preview-card space-y-3">
-      <h3 className="section-header">Tags</h3>
+      <h3 className="browse-section-label">Tags</h3>
 
       <div className="flex flex-wrap gap-2">
         {tags.map((tag: string) => (
@@ -432,7 +432,7 @@ function PreviewNotes({ session }: { session: any }) {
   return (
     <div className="browse-preview-card space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="section-header">Notes</h3>
+        <h3 className="browse-section-label">Notes</h3>
         {!editing && (
           <button
             onClick={() => setEditing(true)}
@@ -524,41 +524,44 @@ function PreviewActions({ session }: { session: any }) {
   return (
     <div className="browse-preview-card space-y-3">
       <h3 className="browse-section-label">Actions</h3>
-      <div className="flex gap-2">
-        <button onClick={handleContinue} className="btn btn-primary flex-1">
-          <Play size={16} className="inline mr-2" />
+      <div className="grid grid-cols-[1.08fr_0.96fr_0.92fr_1.34fr_40px] gap-2">
+        <button
+          onClick={handleContinue}
+          className="btn btn-primary min-w-0 px-2 py-2 text-xs whitespace-nowrap"
+          title="Continue session"
+        >
+          <Play size={14} className="shrink-0" />
           Continue
         </button>
         <button
           onClick={handleBranch}
-          className="btn btn-secondary flex-1"
+          className="btn btn-secondary min-w-0 px-2 py-2 text-xs whitespace-nowrap"
+          title="Branch session"
         >
-          <GitBranch size={16} className="inline mr-2" />
+          <GitBranch size={14} className="shrink-0" />
           Branch
         </button>
-      </div>
-
-      <div className="flex gap-2">
         <button
           onClick={handleCopyId}
-          className="btn btn-secondary flex-1 text-sm"
+          className="btn btn-secondary min-w-0 px-2 py-2 text-xs whitespace-nowrap"
           title="Copy session ID"
         >
-          <Copy size={14} className="inline mr-1" />
+          <Copy size={13} className="shrink-0" />
           Copy ID
         </button>
         <button
           onClick={handleCopyCommand}
-          className="btn btn-secondary flex-1 text-sm"
+          className="btn btn-secondary min-w-0 px-2 py-2 text-xs whitespace-nowrap"
           title="Copy resume command"
         >
-          <Copy size={14} className="inline mr-1" />
+          <Copy size={13} className="shrink-0" />
           Copy Command
         </button>
         <button
           onClick={handleOpenFolder}
-          className="btn btn-secondary text-sm"
+          className="btn btn-secondary w-10 px-0 py-2"
           title="Open in file explorer"
+          aria-label="Open in file explorer"
         >
           <FolderOpen size={14} />
         </button>
