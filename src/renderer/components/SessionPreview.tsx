@@ -83,9 +83,21 @@ function PreviewHeader({ session }: { session: any }) {
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
           <div className="browse-section-label">Session</div>
-          <h2 className="mt-1 text-2xl font-semibold text-text-primary whitespace-normal break-words leading-tight">
-            {session.displaySummary}
+          {/* START> Tharyn | ZedUI SummaryNewlines
+              2026-08-18
+              What: Render session title with pre-wrap + 3-line clamp, trimmed
+              Why: whitespace-normal collapsed stored newlines into one run-on line; the
+                   clamp keeps the header compact so metadata below stays visible
+              Expected: Multi-line summaries show their line breaks, capped at 3 lines;
+                   full text available on hover via the title tooltip and in the Summary panel
+          */}
+          <h2
+            className="mt-1 text-2xl font-semibold text-text-primary whitespace-pre-wrap break-words leading-tight line-clamp-3"
+            title={(session.displaySummary || '').trim()}
+          >
+            {(session.displaySummary || '').trim()}
           </h2>
+          {/* <END Tharyn | ZedUI SummaryNewlines */}
         </div>
         <button
           onClick={handleFavorite}

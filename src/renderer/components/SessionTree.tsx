@@ -339,12 +339,25 @@ function TreeNodeRow({
             })()}
             {/* <END Tharyn | CursorCLI */}
           </div>
-          <div className="mt-1 text-[11px] font-semibold text-text-primary whitespace-normal break-words leading-tight">
+          {/* START> Tharyn | ZedUI SummaryNewlines
+              2026-08-18
+              What: Render tree card summary with pre-wrap + 3-line clamp, trimmed
+              Why: whitespace-normal collapsed stored newlines into one run-on line; the
+                   autoSummary/firstMessage fallback can be very large, so pre-wrap alone
+                   would let a single row grow to hundreds of lines
+              Expected: Multi-line summaries show their line breaks, capped at 3 lines with
+                   an ellipsis; full text available on hover via the title tooltip
+          */}
+          <div
+            className="mt-1 text-[11px] font-semibold text-text-primary whitespace-pre-wrap break-words leading-tight line-clamp-3"
+            title={(session.displaySummary || '').trim()}
+          >
             {node.branchName ? (
               <span className="text-accent text-[10px] mr-1">[{node.branchName}]</span>
             ) : null}
-            {session.displaySummary}
+            {(session.displaySummary || '').trim()}
           </div>
+          {/* <END Tharyn | ZedUI SummaryNewlines */}
         </div>
       </div>
       <span className="text-xs text-text-secondary ml-2 shrink-0">{session.ageDisplay}</span>
