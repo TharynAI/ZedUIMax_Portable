@@ -111,6 +111,26 @@ export function initDb(): void {
   }
   // <END Tharyn | CursorCLI
 
+  /* START> Tharyn | SessionIdentity
+      2026-09-06
+      What: Migration - add call_sign TEXT column to annotations if missing
+      Why:  ZedTrafficControl assigns every agent a call sign when it enrols. Any tool should be
+            able to read it without coupling to the tower's process or its names.json layout, so
+            ZedUIMax stores it alongside the summary and becomes its published home.
+      Expected: PRAGMA table_info(annotations) gains a `call_sign` column on first launch after
+            upgrade; existing rows read NULL until the tower publishes.
+  */
+  try {
+    const columns = db.prepare(`PRAGMA table_info(annotations)`).all() as Array<{ name: string }>;
+    const hasCallSign = columns.some(c => c.name === 'call_sign');
+    if (!hasCallSign) {
+      db.exec(`ALTER TABLE annotations ADD COLUMN call_sign TEXT`);
+    }
+  } catch (err) {
+    console.error('call_sign migration failed:', err);
+  }
+  // <END Tharyn | SessionIdentity
+
   // Tags table
   db.exec(`
     CREATE TABLE IF NOT EXISTS tags (
@@ -155,6 +175,61 @@ export function initDb(): void {
       tokenize='porter unicode61'
     )
   `);
+
+  /* START> Tharyn | SessionIdentity
+      2026-09-06
+      What: Maintain session_fts from triggers instead of application code, and rebuild the index
+            once when the triggers are first created.
+      Why:  session_fts was kept in step by a DELETE+INSERT pair inside upsertAnnotation, which is
+            only reached through this module. ZedTrafficControl is about to write call signs and
+            summaries into annotations with plain SQL, and every such write would have left the
+            search index stale - silently, with no error. Verified before the change: an external
+            INSERT landed in annotations (1 row) and was returned by search 0 times.
+      Expected: Any writer, in any process, keeps search correct. The index cannot be bypassed.
+  */
+  const ftsTriggerCount = (db.prepare(
+    `SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND tbl_name='annotations'`
+  ).get() as { n: number }).n;
+
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS annotations_fts_after_insert AFTER INSERT ON annotations BEGIN
+      DELETE FROM session_fts WHERE session_id = new.session_id;
+      INSERT INTO session_fts (session_id, user_summary, notes, auto_summary, first_message)
+      VALUES (new.session_id, new.user_summary, new.notes, new.auto_summary, new.first_message);
+    END;
+  `);
+
+  // session_id is the primary key but is rewritten by id-variant repair, so the update trigger
+  // clears the OLD key and writes the NEW one rather than assuming they match.
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS annotations_fts_after_update AFTER UPDATE ON annotations BEGIN
+      DELETE FROM session_fts WHERE session_id = old.session_id;
+      DELETE FROM session_fts WHERE session_id = new.session_id;
+      INSERT INTO session_fts (session_id, user_summary, notes, auto_summary, first_message)
+      VALUES (new.session_id, new.user_summary, new.notes, new.auto_summary, new.first_message);
+    END;
+  `);
+
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS annotations_fts_after_delete AFTER DELETE ON annotations BEGIN
+      DELETE FROM session_fts WHERE session_id = old.session_id;
+    END;
+  `);
+
+  // One-time rebuild: rows written before the triggers existed may already be out of step with
+  // the index, and from here on nothing else reconciles them.
+  if (ftsTriggerCount === 0) {
+    try {
+      db.exec(`DELETE FROM session_fts`);
+      db.exec(`
+        INSERT INTO session_fts (session_id, user_summary, notes, auto_summary, first_message)
+        SELECT session_id, user_summary, notes, auto_summary, first_message FROM annotations
+      `);
+    } catch (err) {
+      console.error('session_fts rebuild failed:', err);
+    }
+  }
+  // <END Tharyn | SessionIdentity
 
   // Canonical shared type registry for Browse + ProEng
   db.exec(`
@@ -362,13 +437,18 @@ export function setAnnotation(
     ensureTypeExists(data.type);
   }
 
-  // Update FTS index
-  db.prepare('DELETE FROM session_fts WHERE session_id = ?').run(targetId);
-  db.prepare(`
-    INSERT INTO session_fts (session_id, user_summary, notes, auto_summary, first_message)
-    SELECT session_id, user_summary, notes, auto_summary, first_message
-    FROM annotations WHERE session_id = ?
-  `).run(targetId);
+  /* START> Tharyn | SessionIdentity
+      2026-09-06
+      What: Removed the manual session_fts DELETE+INSERT that ran here.
+      Why:  It only kept the index correct for writes that came through this function, so any
+            external writer - ZedTrafficControl publishing a call sign, a repair script - left
+            search stale with no error. Triggers on annotations now own the index, so it stays
+            correct no matter which process writes.
+      Expected: Identical search results after an upsert, and correct results after a write that
+            never touches this module.
+  */
+  // session_fts is maintained by annotations_fts_after_{insert,update,delete}.
+  // <END Tharyn | SessionIdentity
 
   return getAnnotation(targetId);
 }
