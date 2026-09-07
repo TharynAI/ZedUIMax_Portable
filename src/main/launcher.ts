@@ -448,6 +448,48 @@ async function branchCursorSession(
  * 5. Copy annotation with " (Continued)" suffix
  * 6. Launch the new session
  */
+
+/* START> Tharyn | SessionIdentity
+    2026-09-06
+    What: Builds the destination path for a branched Codex rollout.
+    Why:  Branching wrote `rollout-<epoch-ms>-<id>.jsonl` into the PARENT's date directory.
+          Codex rejects that filename outright - rollout_id_from_path parses the name and
+          thread_rollout_resolver returns "does not have a canonical rollout filename" - so
+          every branch was created in the database and then could not be opened. Renaming the
+          files repaired the symptom on 2026-09-06 and the next branch broke identically,
+          because the writer was never changed.
+
+          The parent's directory is also wrong for an OLD parent: a session branched from
+          April lands its 2026-09 child in the April folder, so the tree stops reflecting when
+          anything happened. Branching an old session has to produce a correctly named and
+          correctly placed child, or old sessions are effectively unbranchable.
+    Expected: rollout-<YYYY-MM-DDThh-mm-ss>-<uuid>.jsonl, under sessions/YYYY/MM/DD for TODAY,
+              created if absent, whatever the parent's age.
+*/
+function codexBranchDestination(sourceFile: string, newRawSessionId: string): string {
+  const now = new Date();
+  const p = (n: number): string => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}` +
+    `T${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}`;
+  const name = `rollout-${stamp}-${newRawSessionId}.jsonl`;
+
+  // sessions/YYYY/MM/DD - derived from the parent's location so this keeps working wherever
+  // CODEX_HOME points, rather than assuming ~/.codex.
+  const parentDay = path.dirname(sourceFile);
+  const sessionsRoot = path.resolve(parentDay, '..', '..', '..');
+  const destDir = path.join(sessionsRoot, String(now.getFullYear()), p(now.getMonth() + 1), p(now.getDate()));
+  try {
+    fs.mkdirSync(destDir, { recursive: true });
+    return path.join(destDir, name);
+  } catch {
+    // If the dated folder cannot be made, a correctly NAMED file beside the parent still
+    // resumes - the resolver reads the filename, not the directory. Placement is tidiness;
+    // the name is correctness.
+    return path.join(parentDay, name);
+  }
+}
+// <END Tharyn | SessionIdentity
+
 export async function branchSession(
   parentSessionId: string,
   branchName?: string,
@@ -498,9 +540,22 @@ export async function branchSession(
 
   // Source and destination paths
   const sourceFile = details.filePath;
+
+  // 164 of 465 threads on this machine point at a rollout file that no longer exists (measured
+  // 2026-09-06). Branching one used to throw ENOENT out of readFileSync and surface as a blank
+  // failure; say which file is missing instead.
+  if (!sourceFile || !fs.existsSync(sourceFile)) {
+    safeError(`[BRANCH] Parent transcript is missing: ${sourceFile}`);
+    return {
+      success: false,
+      newSessionId: null,
+      branchId: 0,
+      error: `Cannot branch: the parent session's transcript file no longer exists (${sourceFile ?? 'no path recorded'}).`,
+    };
+  }
   const destDir = path.dirname(sourceFile);
   const destFile = providerId === 'codex'
-    ? path.join(destDir, `rollout-${Date.now()}-${newRawSessionId}.jsonl`)
+    ? codexBranchDestination(sourceFile, newRawSessionId)
     : path.join(destDir, `${newRawSessionId}.jsonl`);
 
   try {

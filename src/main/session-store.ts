@@ -1745,7 +1745,22 @@ function searchCodexMessages(
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n');
-        const rawSessionId = path.basename(filePath, '.jsonl').replace(/^rollout-[0-9]+-/, '');
+        /* START> Tharyn | SessionIdentity
+            2026-09-06
+            What: Strip the canonical rollout prefix as well as the legacy epoch one.
+            Why:  `/^rollout-[0-9]+-/` only matches the old `rollout-<epoch-ms>-` form. On a
+                  canonical `rollout-2026-09-06T18-03-53-<uuid>` name it consumes `rollout-2026-`
+                  and stops, yielding `09-06T18-03-53-<uuid>` as the session id. Codex 0.153.4
+                  renamed nearly every rollout to the canonical form, so the search scan has been
+                  building malformed ids for almost the whole corpus - the results key off a
+                  session that does not exist.
+            Expected: Both shapes reduce to the bare uuid, so search results resolve to real
+                  sessions.
+        */
+        const rawSessionId = path
+          .basename(filePath, '.jsonl')
+          .replace(/^rollout-(?:\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}|\d{13})-/, '');
+        // <END Tharyn | SessionIdentity
         const sessionId = buildSessionId('codex', rawSessionId);
 
         for (const line of lines) {
