@@ -22,6 +22,8 @@ interface LauncherOption {
 const LAUNCHERS: LauncherOption[] = [
   { id: 'claude2', label: 'Claude2' },
   { id: 'codex2', label: 'Codex2' },
+  // Dedicated bridge product, not the normal Codex launcher (2026-09-08).
+  { id: 'cursx', label: 'CursX' },
   { id: 'gemini3', label: 'Gemini3' },
   { id: 'cursor', label: 'Cursor' },
 ];
@@ -29,6 +31,7 @@ const LAUNCHERS: LauncherOption[] = [
 
 export default function LauncherMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [hoveredLauncher, setHoveredLauncher] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -48,13 +51,16 @@ export default function LauncherMenu() {
   }, [isOpen]);
 
   const handleLaunch = async (launcherId: string, mode: 'new' | 'resume') => {
+    setLaunchError(null);
     try {
       const result = await window.electronAPI.launchAssistant(launcherId, mode);
       if (!result.success) {
         console.error('Launch failed:', result.error);
+        setLaunchError(result.error || 'Unable to launch assistant.');
       }
     } catch (error) {
       console.error('Error launching assistant:', error);
+      setLaunchError(error instanceof Error ? error.message : 'Unable to launch assistant.');
     }
     setIsOpen(false);
     setHoveredLauncher(null);
@@ -62,7 +68,9 @@ export default function LauncherMenu() {
 
   const renderSubmenu = (launcher: LauncherOption) => {
     return (
-      <div className="absolute left-full top-0 ml-1 bg-bg-secondary border border-border rounded shadow-lg min-w-[100px]">
+      // Open inward from the right-edge toolbar; padding keeps the hover corridor continuous.
+      <div className="absolute right-full top-0 pr-1">
+      <div className="bg-bg-secondary border border-border rounded shadow-lg min-w-[100px]">
         <button
           className="w-full px-4 py-2 text-left text-sm hover:bg-bg-tertiary flex items-center gap-2"
           onClick={() => handleLaunch(launcher.id, 'new')}
@@ -78,6 +86,7 @@ export default function LauncherMenu() {
           <span>Resume</span>
         </button>
       </div>
+      </div>
     );
   };
 
@@ -90,6 +99,13 @@ export default function LauncherMenu() {
       >
         <Rocket size={27} />
       </button>
+
+      {launchError && (
+        <div role="alert" className="absolute top-full right-0 mt-1 bg-bg-secondary border border-border rounded shadow-lg w-80 p-3 z-50 text-sm">
+          <p className="text-red-400">{launchError}</p>
+          <button className="mt-2 underline" onClick={() => setLaunchError(null)}>Dismiss</button>
+        </div>
+      )}
 
       {isOpen && (
         <div className="absolute top-full right-0 mt-1 bg-bg-secondary border border-border rounded shadow-lg min-w-[140px] z-50">

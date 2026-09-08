@@ -6,7 +6,7 @@ import { toWslPath, wslToWindowsPath } from './provider-utils';
 import type { PortableProviderConfig } from '../shared/portable-config';
 
 export type CodexVariant = 'codex' | 'codexSub';
-export type AssistantLauncherId = 'claude2' | 'codex2' | 'cursor' | 'gemini3';
+export type AssistantLauncherId = 'claude2' | 'codex2' | 'cursx' | 'cursor' | 'gemini3';
 export type AssistantLaunchMode = 'new' | 'resume';
 
 export interface LaunchCommand {
@@ -154,6 +154,9 @@ export function buildCodexLaunch(mode: 'new' | 'resume', cwd: string, resumeId?:
             THROWS rather than silently falling back to Codex.
   */
   const resolved = productById(product ?? null);
+  if (product && product !== 'codex' && !resolved) {
+    throw new Error(`${product} is not configured in the Tower product registry; refusing to launch it as Codex.`);
+  }
   if (resolved && resolved.fallback !== true) {
     const cmd = mode === 'resume' ? resolved.resume : resolved.launch;
     if (!cmd) {
@@ -161,6 +164,19 @@ export function buildCodexLaunch(mode: 'new' | 'resume', cwd: string, resumeId?:
       throw new Error(`${resolved.label} has no ${mode} command configured; refusing to launch it as Codex.`);
     }
     const filled = fillCommand(cmd, { sessionId: resumeId ?? null, cwd: wslToWindowsPath(cwd) });
+    /* START> Tharyn | CursX
+        2026-09-08
+        What: Give every CursX launch consumer an interactive Windows Terminal.
+        Why: Saved-session Resume previously ran PowerShell with execFile pipes. The service
+             could start separately, but the Codex TUI had no terminal. Rocket-only wrapping
+             missed continueSession and copy-resume commands.
+        Expected: New, picker and exact-ID resume share one terminal wrapper; normal Codex unchanged.
+    */
+    if (resolved.id === 'cursx') {
+      const args = [filled.exe, ...filled.args.filter(arg => arg !== '')];
+      return { command: 'wt.exe', args, displayCommand: displayCommand('wt', args) };
+    }
+    // <END Tharyn | CursX
     return {
       command: filled.exe,
       args: filled.args,
@@ -276,6 +292,20 @@ export function buildAssistantLaunch(launcherId: AssistantLauncherId, mode: Assi
       return buildClaudeLaunch(mode, workspaceWin);
     case 'codex2':
       return buildCodexLaunch(mode, workspaceWin);
+    /* START> Tharyn | CursX
+        2026-09-08
+        What: Use the registered CursX new/resume commands from the rocket menu.
+        Why: CursX shares the Codex harness but must never use its default launcher/home.
+        Expected: Missing product configuration fails visibly, never falls back to Codex.
+    */
+    case 'cursx': {
+      const product = productById('cursx');
+      if (!product || product.fallback === true || product.keyProvider !== 'codex') {
+        throw new Error('CursX is not configured in the Tower product registry; refusing to launch it as Codex.');
+      }
+      return buildCodexLaunch(mode, workspaceWin, undefined, 'codex', product.id);
+    }
+    // <END Tharyn | CursX
     case 'cursor':
       return buildCursorLaunch(mode, workspaceWin);
     case 'gemini3': {

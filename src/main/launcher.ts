@@ -556,6 +556,24 @@ export async function branchSession(
       error: `Cannot branch: the parent session's transcript file no longer exists (${sourceFile ?? 'no path recorded'}).`,
     };
   }
+  /* START> Tharyn | CursX
+      2026-09-08
+      What: Resolve the parent's product and preflight the child's launch before any writes.
+      Why: CursX branches were copied into its private home but opened through normal Codex.
+           A missing route must not leave a child transcript/annotation behind.
+      Expected: CursX retains its launcher and terminal, normal Codex/Claude stay unchanged.
+  */
+  const cwd = details.cwd || details.projectDisplay;
+  let branchLaunch: ReturnType<typeof buildCodexLaunch>;
+  try {
+    branchLaunch = providerId === 'claude'
+      ? buildClaudeLaunch('resume', cwd, newRawSessionId)
+      : buildCodexLaunch('resume', cwd, newRawSessionId, opts?.codexVariant || 'codex',
+          getCodexProductForRawId(rawParentId));
+  } catch (error) {
+    return { success: false, newSessionId: null, branchId: 0, error: String(error) };
+  }
+  // <END Tharyn | CursX
   const destDir = path.dirname(sourceFile);
   const destFile = providerId === 'codex'
     ? codexBranchDestination(sourceFile, newRawSessionId)
@@ -644,15 +662,8 @@ export async function branchSession(
     });
 
     // 6. Launch the new session
-    const cwd = details.cwd || details.projectDisplay;
-    if (providerId === 'claude') {
-      const launch = buildClaudeLaunch('resume', cwd, newRawSessionId);
-      await runLaunchCommand(launch.command, launch.args, 'Launching branched Claude session:');
-    } else {
-      const codexVariant = opts?.codexVariant || 'codex';
-      const launch = buildCodexLaunch('resume', cwd, newRawSessionId, codexVariant);
-      await runLaunchCommand(launch.command, launch.args, 'Launching branched Codex session:');
-    }
+    await runLaunchCommand(branchLaunch.command, branchLaunch.args,
+      providerId === 'claude' ? 'Launching branched Claude session:' : 'Launching branched Codex-family session:');
 
     return {
       success: true,
