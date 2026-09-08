@@ -6,6 +6,7 @@
  */
 
 import { execFile } from 'child_process';
+import { getCodexProductForRawId } from './session-store';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -81,7 +82,9 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
   */
   switch (providerId) {
     case 'codex': {
-      const launch = buildCodexLaunch('resume', cwd, rawId, codexVariant);
+      // Route by product; a CursX conversation resumed through Codex would open against the
+      // wrong CODEX_HOME. getCodexProductForRawId returns null for normal Codex.
+      const launch = buildCodexLaunch('resume', cwd, rawId, codexVariant, getCodexProductForRawId(rawId));
       try {
         await runLaunchCommand(launch.command, launch.args, 'Launching Codex session:');
       } catch (error) {
@@ -182,7 +185,7 @@ export function getResumeCommand(sessionId: string): string | null {
   switch (providerId) {
     case 'codex': {
       try {
-        const launch = buildCodexLaunch('resume', cwd, rawId);
+        const launch = buildCodexLaunch('resume', cwd, rawId, 'codex', getCodexProductForRawId(rawId));
         return launch.wslShellCommand || launch.displayCommand;
       } catch {
         return null;

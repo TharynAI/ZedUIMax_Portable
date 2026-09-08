@@ -44,6 +44,39 @@ export function getProviderDisplay(id: ProviderId): ProviderDisplay {
   return map[id] ?? map.claude;
 }
 
+/* START> Tharyn | CursX
+    2026-09-07
+    What: Badge a session by its PRODUCT when it has one, falling back to the provider.
+    Why:  CursX sessions are keyed `codex:` deliberately, so getProviderDisplay would badge them
+          "Codex" - hiding the only thing that distinguishes them, and hiding it in the one place
+          the user chooses which session to resume. A distinct tint matters as much as the label:
+          the two are otherwise identical rows.
+          Note getProviderDisplay falls back to `claude` for an unknown id, so an unrecognised
+          product must NOT be routed through it - it would silently mislabel as Claude.
+    Expected: CursX rows read "CursX" in their own colour; Codex, Claude and Cursor unchanged.
+*/
+const productMap: Record<string, ProviderDisplay> = {
+  cursx: {
+    id: 'codex',            // still Codex-family for anything keyed off the id
+    label: 'CursX',
+    assistantName: 'CursX',
+    badgeBgClass: 'bg-teal-900/20',
+    badgeBorderClass: 'border-teal-700/40',
+  },
+};
+
+export function getSessionDisplay(
+  providerId: ProviderId,
+  product?: string | null,
+): ProviderDisplay {
+  if (product && productMap[product]) return productMap[product]!;
+  return getProviderDisplay(providerId);
+}
+
+export const PRODUCT_FILTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> =
+  Object.entries(productMap).map(([id, d]) => ({ id, label: d.label }));
+// <END Tharyn | CursX
+
 export const PROVIDER_FILTER_OPTIONS: ReadonlyArray<{ id: ProviderId | 'all'; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'claude', label: 'Claude' },

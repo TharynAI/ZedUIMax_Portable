@@ -21,7 +21,7 @@ import {
     Why: Inline ternary only handled Claude/Codex
     Expected: Cursor sessions show purple 'Cursor' badge
 */
-import { getProviderDisplay } from '../providers/display';
+import { getSessionDisplay } from '../providers/display';
 // <END Tharyn | CursorCLI
 
 function SessionPreview() {
@@ -119,7 +119,8 @@ function PreviewHeader({ session }: { session: any }) {
             Expected: Claude/Codex/Cursor render correct label + tint
         */}
         {(() => {
-          const disp = getProviderDisplay(session.providerId);
+          // Badge by product so a CursX session is not shown as plain Codex.
+          const disp = getSessionDisplay(session.providerId, session.product);
           return (
             <span
               className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border ${disp.badgeBgClass} ${disp.badgeBorderClass}`}

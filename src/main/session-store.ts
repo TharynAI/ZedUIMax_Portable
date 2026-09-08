@@ -8,6 +8,7 @@
  */
 
 import fs from 'fs';
+import { canonPath, productForFile, productsForProvider, toNativeReadPath } from './agent-products';
 import path from 'path';
 import readline from 'readline';
 import {
@@ -56,6 +57,20 @@ export interface SessionInfo {
   cwd: string;
   filePath: string;
   fileSize: number;
+  /* START> Tharyn | CursX
+      2026-09-07
+      What: Which agent PRODUCT this session belongs to, e.g. `codex` or `cursx`.
+      Why:  providerId cannot answer it. A CursX session is keyed `codex:<uuid>` - deliberately,
+            so its existing annotations keep joining - so anything that re-parses the id gets
+            `codex` back. Product is derived from the ROOT the transcript was found in, which is
+            the only evidence that cannot drift, and it is what decides the badge and the
+            launcher. Optional: a session under no registered root has none, and behaves exactly
+            as it did before.
+      Expected: A CursX transcript reports `cursx` and resumes through the CursX launcher; every
+            existing Codex session reports `codex` and is untouched.
+  */
+  product?: string;
+  // <END Tharyn | CursX
 }
 
 export interface SessionDetails extends SessionInfo {
@@ -500,7 +515,21 @@ export function getSessions(
     sessions = sessions.concat(getClaudeSessions(getProviderRoot(config, 'claude'), days));
   }
   if (providers.includes('codex')) {
-    sessions = sessions.concat(getCodexSessions(getProviderRoot(config, 'codex'), days));
+    /* START> Tharyn | CursX
+        2026-09-07
+        What: Discover EVERY Codex-family root, not just the one configured slot.
+        Why:  config.providers.codex holds a single sessionsDir, so CursX transcripts - which
+              live in an isolated CODEX_HOME - were not discovered at all. Pointing that one
+              setting at CursX would have hidden normal Codex instead; the two cannot share one
+              slot. Roots come from the tower's product registry so this list is not a second
+              place to maintain.
+        Expected: Codex and CursX sessions both appear, each tagged with the product whose root
+              it came from. With no registry, the configured root is used exactly as before.
+    */
+    for (const root of codexFamilyRoots(config)) {
+      sessions = sessions.concat(getCodexSessions(root.dir, days, root.product));
+    }
+    // <END Tharyn | CursX
   }
   if (providers.includes('cursor')) {
     sessions = sessions.concat(getCursorSessions(getProviderRoot(config, 'cursor'), days));
@@ -797,7 +826,24 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
       details = getClaudeSessionDetails(rawId, providerRoot);
       break;
     case 'codex':
-      details = getCodexSessionDetails(rawId, providerRoot);
+      /* START> Tharyn | CursX
+          2026-09-07
+          What: Look for the transcript in every Codex-family root, not only the configured one.
+          Why:  A CursX session is keyed `codex:<uuid>` and lives under the CursX home. Searching
+                only the configured root returned null for it - "Session not found" - even though
+                the row was listed a moment earlier by multi-root discovery. A session you can
+                see but cannot open is worse than one that is simply absent.
+          Expected: Details resolve for Codex and CursX alike, from whichever root holds the file.
+      */
+      details = null;
+      for (const root of codexFamilyRoots(config)) {
+        details = getCodexSessionDetails(rawId, root.dir);
+        if (details) {
+          if (root.product) details.product = root.product;
+          break;
+        }
+      }
+      // <END Tharyn | CursX
       break;
     case 'cursor':
       details = getCursorSessionDetails(rawId, providerRoot);
@@ -1112,7 +1158,41 @@ function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDeta
   }
 }
 
-function getCodexSessions(sessionsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
+/* START> Tharyn | CursX
+    2026-09-07
+    What: Every sessions root that produces `codex:`-keyed sessions, with the product for each.
+    Why:  The configured root stays first and authoritative - it is what the user set - and the
+          registry adds any further product roots. Duplicates are folded on the canonical path so
+          a registry that names the same directory the user configured does not scan it twice and
+          manufacture duplicate rows.
+    Expected: Normal Codex plus CursX, each once, even if the registry and settings overlap.
+*/
+function codexFamilyRoots(config: PortableProviderConfig): Array<{ dir: string; product?: string }> {
+  const out: Array<{ dir: string; product?: string }> = [];
+  const seen = new Set<string>();
+  const add = (dir: string, product?: string) => {
+    const key = canonPath(dir);
+    if (!dir || !key || seen.has(key)) return;
+    seen.add(key);
+    out.push(product ? { dir, product } : { dir });
+  };
+
+  const configured = getProviderRoot(config, 'codex');
+  if (configured) {
+    const p = productForFile(configured, 'codex');
+    add(configured, p?.id);
+  }
+  for (const p of productsForProvider('codex')) {
+    if (p.sessionsDir) add(toNativeReadPath(p.sessionsDir), p.id);
+  }
+  return out;
+}
+
+function getCodexSessions(
+  sessionsRoot: string,
+  days: number = DEFAULT_DAYS,
+  product?: string,
+): SessionInfo[] {
   if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return [];
   }
@@ -1126,6 +1206,10 @@ function getCodexSessions(sessionsRoot: string, days: number = DEFAULT_DAYS): Se
       if (stat.mtime < cutoff || stat.size < MIN_SESSION_SIZE) return;
       const session = parseCodexSessionFile(filePath, stat);
       if (session) {
+        // The root it came from IS the product. Derived here rather than re-derived at each
+        // consumer, so the badge and the launcher can never disagree about one session.
+        const resolved = product ?? productForFile(filePath, 'codex')?.id;
+        if (resolved) session.product = resolved;
         sessions.push(session);
       }
     });
@@ -1163,6 +1247,30 @@ function findCodexFileById(rawSessionId: string, sessionsRoot: string): string |
 
   return foundFilePath;
 }
+
+/* START> Tharyn | CursX
+    2026-09-07
+    What: Which Codex-family product owns a raw session id, found by locating its transcript.
+    Why:  The launcher is handed a session id and nothing else, and the id cannot answer this - a
+          CursX session is keyed `codex:` on purpose. The transcript's location can, so the roots
+          are walked until the file turns up. A directory walk is fine here: this runs when a
+          human clicks Continue, not on any hot path.
+    Expected: A CursX id resolves to `cursx` and routes to the CursX launcher; anything not found
+          under a registered root returns null and takes the normal Codex path, exactly as before.
+*/
+export function getCodexProductForRawId(rawSessionId: string): string | null {
+  try {
+    const config = loadPortableConfigFromSettingsFile();
+    for (const root of codexFamilyRoots(config)) {
+      if (!root.dir || !fs.existsSync(root.dir)) continue;
+      if (findCodexFileById(rawSessionId, root.dir)) return root.product ?? null;
+    }
+  } catch {
+    // Never let product resolution break a launch; the caller falls back to normal Codex.
+  }
+  return null;
+}
+// <END Tharyn | CursX
 
 function getCodexSessionDetails(rawSessionId: string, sessionsRoot: string): SessionDetails | null {
   if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
@@ -1363,7 +1471,8 @@ export function getResumeInfo(sessionId: string): ResumeInfo | null {
         };
       }
       case 'codex': {
-        const launch = buildCodexLaunch('resume', cwd, rawId);
+        // Route by product: a CursX session must not be handed a normal Codex resume command.
+        const launch = buildCodexLaunch('resume', cwd, rawId, 'codex', details.product ?? getCodexProductForRawId(rawId));
         const wslShellCommand = launch.wslShellCommand || launch.displayCommand;
         return {
           sessionId,

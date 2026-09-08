@@ -3,6 +3,17 @@ export interface Session {
   sessionId: string;           // Provider-prefixed ID (e.g., "claude:uuid")
   rawSessionId: string;        // ID from provider file
   providerId: 'claude' | 'codex' | 'cursor';
+  /* START> Tharyn | CursX
+      2026-09-07
+      What: The agent product, e.g. `codex` or `cursx`.
+      Why:  providerId stays the CLI family because it owns the `codex:<uuid>` database key that
+            CursX's existing annotations join on. The product is what the badge should say and
+            what the launcher routes on, and it is set from the transcript's root in the main
+            process.
+      Expected: A CursX row is badged CursX; every existing session is unaffected.
+  */
+  product?: string;
+  // <END Tharyn | CursX
   model?: string;              // Model name (e.g., claude-3-opus, gpt-4)
   projectPath: string;         // e.g., "-mnt-e-ZedBang"
   projectDisplay: string;      // e.g., "/mnt/e/ZedBang"

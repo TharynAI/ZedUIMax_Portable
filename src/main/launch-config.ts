@@ -1,4 +1,5 @@
 import { LAUNCH_ENV } from '../shared/constants';
+import { fillCommand, productById } from './agent-products';
 import type { ProviderId } from '../shared/constants';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
 import { toWslPath, wslToWindowsPath } from './provider-utils';
@@ -138,7 +139,36 @@ function codexScript(provider: PortableProviderConfig['providers']['codex'], mod
   return (mode === 'resume' ? provider.resumeScriptWin : provider.newScriptWin)?.trim() || '';
 }
 
-export function buildCodexLaunch(mode: 'new' | 'resume', cwd: string, resumeId?: string, variant: CodexVariant = 'codex'): LaunchCommand {
+export function buildCodexLaunch(mode: 'new' | 'resume', cwd: string, resumeId?: string, variant: CodexVariant = 'codex', product?: string | null): LaunchCommand {
+  /* START> Tharyn | CursX
+      2026-09-07
+      What: Route to the product's own launcher when the session is not normal Codex.
+      Why:  Every Codex-keyed session used to resolve to config.providers.codex, because routing
+            was decided purely by the `codex:` prefix on the session id. CursX shares that prefix
+            deliberately - four of its annotation rows depend on it - so without this, resuming a
+            CursX conversation would open it through the normal Codex launcher and therefore
+            against the WRONG CODEX_HOME. That is not a cosmetic error: it points a different
+            history at a live conversation.
+      Expected: A CursX session launches through cursx.ps1 / cursx_resume.ps1 with its own
+            profile; normal Codex is completely unchanged; and a product whose command is missing
+            THROWS rather than silently falling back to Codex.
+  */
+  const resolved = productById(product ?? null);
+  if (resolved && resolved.fallback !== true) {
+    const cmd = mode === 'resume' ? resolved.resume : resolved.launch;
+    if (!cmd) {
+      // Deliberately not a fallback. Substituting Codex here is the exact misroute above.
+      throw new Error(`${resolved.label} has no ${mode} command configured; refusing to launch it as Codex.`);
+    }
+    const filled = fillCommand(cmd, { sessionId: resumeId ?? null, cwd: wslToWindowsPath(cwd) });
+    return {
+      command: filled.exe,
+      args: filled.args,
+      displayCommand: displayCommand(filled.exe, filled.args),
+    };
+  }
+  // <END Tharyn | CursX
+
   const config = loadPortableConfigFromSettingsFile();
   const provider = config.providers.codex;
   if (!provider.enabled) {

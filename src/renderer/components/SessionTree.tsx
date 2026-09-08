@@ -17,7 +17,7 @@ import { useInputDialogStore } from './InputDialog';
     Why: Inline ternary only handled 'codex' vs default-Claude; Cursor needs its own tint
     Expected: Cursor sessions show purple badge labelled 'Cursor'
 */
-import { getProviderDisplay } from '../providers/display';
+import { getSessionDisplay } from '../providers/display';
 // <END Tharyn | CursorCLI
 
 interface TreeNode {
@@ -327,7 +327,8 @@ function TreeNodeRow({
                 Expected: Claude/Codex/Cursor each render distinct tint + label
             */}
             {(() => {
-              const disp = getProviderDisplay(session.providerId);
+              // Badge by product so a CursX session is not shown as plain Codex.
+          const disp = getSessionDisplay(session.providerId, session.product);
               return (
                 <span
                   className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border ${disp.badgeBgClass} ${disp.badgeBorderClass}`}

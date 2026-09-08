@@ -34,6 +34,17 @@ export interface Annotation {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
+  /* START> Tharyn | CursX
+      2026-09-07
+      What: Expose the call sign ZedTrafficControl publishes into annotations.call_sign.
+      Why:  The column has existed since 2026-09-06 and was read by NOTHING - getAnnotation does
+            SELECT * but never mapped it, so the name the user actually refers to their agents by
+            ("Warden", "Apex RS") could not reach the UI. ZedRemote shows it; this did not.
+      Expected: A session the tower has named shows that name; one it has not shows nothing,
+            rather than an empty string pretending to be a name.
+  */
+  callSign: string | null;
+  // <END Tharyn | CursX
 }
 
 export interface TagInfo {
@@ -352,6 +363,9 @@ export function getAnnotation(sessionId: string): Annotation | null {
     tags: tags.map(t => t.name),
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
+    // Owned by the tower, never written here. Empty is normalised to null so the UI can tell
+    // "no call sign" from a blank one rather than rendering an empty label.
+    callSign: (String(row.call_sign ?? '').trim() || null),
   };
 }
 
