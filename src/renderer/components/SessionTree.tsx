@@ -339,6 +339,26 @@ function TreeNodeRow({
               );
             })()}
             {/* <END Tharyn | CursorCLI */}
+            {/* START> Tharyn | ZedUIMax CallSign
+                2026-09-08
+                What: Show the call sign the tower allocates for this session.
+                Why:  Parity plan 005 A2. ZedTrafficControl has been writing annotations.call_sign
+                      since 2026-09-06 and getAnnotation() has been reading it, but the renderer's
+                      Annotation type never declared it and no component drew it - so the tower
+                      maintained an identity this app never showed. ZedRemote has shown it all
+                      along, which is exactly the inconsistency parity is meant to remove.
+                Expected: A session the tower has named leads with that name; one it has not is
+                      unchanged. Never written from here - the tower owns it.
+            */}
+            {session.annotation?.callSign ? (
+              <span
+                className="text-[10px] font-semibold text-accent truncate max-w-[14rem]"
+                title={`Call sign: ${session.annotation.callSign} (allocated by ZedTrafficControl)`}
+              >
+                {session.annotation.callSign}
+              </span>
+            ) : null}
+            {/* <END Tharyn | ZedUIMax CallSign */}
           </div>
           {/* START> Tharyn | ZedUI SummaryNewlines
               2026-08-18

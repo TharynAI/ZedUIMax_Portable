@@ -34,6 +34,7 @@ export interface Annotation {
   isFavorite: boolean;         // Starred status
   tags: string[];              // User tags
   type?: string;               // Type tag for grouping (e.g., "unreal-engine")
+  callSign?: string | null;    // Allocated by ZedTrafficControl, never written here
   parentSessionId?: string;    // For branch tracking
   branchName?: string;         // Optional branch label
   createdAt: Date;
