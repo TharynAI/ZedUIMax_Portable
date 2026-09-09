@@ -21,7 +21,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DEFAULT_TOWER_DATA_DIR = 'E:\\ZedBang\\ZedTrafficControl\\data';
+import { sharedPath } from './shared-paths';
+
+/* START> Tharyn | ZedUIMax SharedPaths
+    2026-09-08
+    What: Take the tower's data directory from the shared path file, not a literal.
+    Why:  Parity plan 005 A3a. See shared-paths.ts for the full reasoning.
+    Expected: Same directory as before on a normal install; redirectable by a harness; a loud,
+          self-identifying failure if the shared file is missing the key.
+*/
+const towerDataDir = (): string => sharedPath('zedTrafficControlData', 'zeduimax-products');
+// <END Tharyn | ZedUIMax SharedPaths
 
 export interface ProductCommand {
   exe: string;
@@ -70,8 +80,37 @@ const CACHE_MS = 30_000;
  * in its config dir. `data/` is gitignored in the tower repo, so the config copy is the one that
  * exists on a normal install; reading only `data/` would find nothing, silently.
  */
-export function loadProducts(towerDataDirWin: string = DEFAULT_TOWER_DATA_DIR): AgentProduct[] {
+let warnedSharedPath = false;
+
+export function loadProducts(towerDataDirWin?: string): AgentProduct[] {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.products;
+  /* START> Tharyn | ZedUIMax SharedPaths
+      2026-09-08
+      What: Report a missing shared-path entry once and carry on with an empty registry, rather
+            than throwing out of here.
+      Why:  Parity plan 005 says fail loudly, and it is right - but this function runs on EVERY
+            session listing (session-store.ts:1182,1185,1211). Throwing here would take out the
+            whole Browse tab because a path file is absent, which is loud in the wrong place. The
+            dangerous case is already guarded where it is dangerous: buildCodexLaunch throws for a
+            non-codex product with no launch command, so a CursX session still cannot be
+            misrouted into the normal Codex launcher. Loud at the boundary that matters, quiet at
+            the one that does not.
+      Expected: Sessions still list with a missing shared file; the reason is on the console once,
+            not once per listing; and launching CursX still refuses rather than misrouting.
+  */
+  if (towerDataDirWin === undefined) {
+    try {
+      towerDataDirWin = towerDataDir();
+    } catch (e) {
+      if (!warnedSharedPath) {
+        warnedSharedPath = true;
+        console.error(`[agent-products] product registry unavailable: ${(e as Error).message}`);
+      }
+      cache = { at: Date.now(), products: [] };
+      return [];
+    }
+  }
+  // <END Tharyn | ZedUIMax SharedPaths
   // Registry paths are stored Windows-style, but this code also runs under WSL (tests, tooling),
   // where `E:\...` is not a readable path and every read silently misses. A missing registry is
   // NOT harmless here: it makes CursX resume fall through to the normal Codex launcher, which is
