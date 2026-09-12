@@ -14,6 +14,53 @@ type ProviderFilter = 'all' | 'claude' | 'codex' | 'cursor';
 
 type TreeMode = 'type' | 'project' | 'date' | 'branches' | 'favorites';
 
+/* START> Tharyn | ZedUI
+    2026-09-12
+    What: Define durable renderer-owned progress for destructive Ungrouped cleanup.
+    Why: The previous local `Cleaning` label hid candidate discovery, sequential deletion, failures, and refresh work.
+    Expected: Cleanup progress survives component rerenders and can be hidden/reopened without interrupting work.
+*/
+export type CleanupPhase = 'idle' | 'discovering' | 'deleting' | 'refreshing' | 'complete' | 'failed';
+
+export interface CleanupFailure {
+  sessionId: string;
+  providerId: string;
+  error: string;
+}
+
+export interface CleanupProgress {
+  phase: CleanupPhase;
+  limit: number;
+  total: number;
+  processed: number;
+  deleted: number;
+  skipped: number;
+  currentSessionId: string | null;
+  currentProviderId: string | null;
+  message: string;
+  failures: CleanupFailure[];
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+const IDLE_CLEANUP_PROGRESS: CleanupProgress = {
+  phase: 'idle',
+  limit: 0,
+  total: 0,
+  processed: 0,
+  deleted: 0,
+  skipped: 0,
+  currentSessionId: null,
+  currentProviderId: null,
+  message: 'No cleanup is running',
+  failures: [],
+  startedAt: null,
+  finishedAt: null,
+};
+
+const yieldToRenderer = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+// <END Tharyn | ZedUI
+
 /* START> Tharyn | CursorCLI
     2026-05-03
     What: Module-scoped one-shot hydration flag for OD-1 providerFilter persistence
@@ -75,6 +122,11 @@ interface SessionStore {
   branchSession: (sessionId: string, branchName?: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<boolean>;
   cleanupOldestUngrouped: (limit: number) => Promise<number>;
+  cleanupProgress: CleanupProgress;
+  cleanupDialogOpen: boolean;
+  showCleanupProgress: () => void;
+  hideCleanupProgress: () => void;
+  clearCleanupProgress: () => void;
 
   /* START> 2025-12-02 | Sphere -> Tharyn | CC
   * Phase 3: Bulk Operations actions
@@ -139,6 +191,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   messageSearchResults: [],
   messageSearchLoading: false,
   targetMessageIndex: null,
+  cleanupProgress: { ...IDLE_CLEANUP_PROGRESS },
+  cleanupDialogOpen: false,
+  showCleanupProgress: () => set({ cleanupDialogOpen: true }),
+  hideCleanupProgress: () => set({ cleanupDialogOpen: false }),
+  clearCleanupProgress: () => {
+    const phase = get().cleanupProgress.phase;
+    if (phase === 'discovering' || phase === 'deleting' || phase === 'refreshing') return;
+    set({ cleanupDialogOpen: false, cleanupProgress: { ...IDLE_CLEANUP_PROGRESS } });
+  },
 
   // Load sessions from main process
   loadSessions: async () => {
@@ -558,6 +619,25 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const deleteLimit = Math.max(1, Math.floor(limit));
     const { daysFilter } = get();
 
+    const activePhase = get().cleanupProgress.phase;
+    if (activePhase === 'discovering' || activePhase === 'deleting' || activePhase === 'refreshing') {
+      set({ cleanupDialogOpen: true });
+      return get().cleanupProgress.deleted;
+    }
+
+    const startedAt = new Date().toISOString();
+    set({
+      cleanupDialogOpen: true,
+      cleanupProgress: {
+        ...IDLE_CLEANUP_PROGRESS,
+        phase: 'discovering',
+        limit: deleteLimit,
+        message: 'Finding the oldest Ungrouped sessions across all providers…',
+        startedAt,
+      },
+    });
+    await yieldToRenderer();
+
     try {
       const allProviderSessions = await window.electronAPI.getSessions(daysFilter, undefined, undefined);
       const candidates: SessionViewModel[] = allProviderSessions
@@ -577,16 +657,79 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       let deletedCount = 0;
       const deletedIds = new Set<string>();
 
-      for (const session of candidates) {
+      set({
+        cleanupProgress: {
+          ...get().cleanupProgress,
+          phase: candidates.length ? 'deleting' : 'complete',
+          total: candidates.length,
+          message: candidates.length
+            ? `Deleting 0 of ${candidates.length} sessions…`
+            : 'No Ungrouped sessions matched the cleanup request.',
+          finishedAt: candidates.length ? null : new Date().toISOString(),
+        },
+      });
+      await yieldToRenderer();
+
+      if (candidates.length === 0) {
+        return 0;
+      }
+
+      for (let index = 0; index < candidates.length; index++) {
+        const session = candidates[index];
+        if (!session) continue;
+        set({
+          cleanupProgress: {
+            ...get().cleanupProgress,
+            phase: 'deleting',
+            currentSessionId: session.sessionId,
+            currentProviderId: session.providerId,
+            message: `Deleting session ${index + 1} of ${candidates.length}…`,
+          },
+        });
+        await yieldToRenderer();
         try {
           const result = await window.electronAPI.deleteSession(session.sessionId);
           if (result?.deleted) {
             deletedCount++;
             deletedIds.add(session.sessionId);
+          } else {
+            const failure: CleanupFailure = {
+              sessionId: session.sessionId,
+              providerId: session.providerId,
+              error: 'The provider did not confirm deletion.',
+            };
+            set({
+              cleanupProgress: {
+                ...get().cleanupProgress,
+                failures: [...get().cleanupProgress.failures, failure],
+              },
+            });
           }
         } catch (error) {
           console.error(`Failed to delete ungrouped session ${session.sessionId}:`, error);
+          const failure: CleanupFailure = {
+            sessionId: session.sessionId,
+            providerId: session.providerId,
+            error: error instanceof Error ? error.message : String(error),
+          };
+          set({
+            cleanupProgress: {
+              ...get().cleanupProgress,
+              failures: [...get().cleanupProgress.failures, failure],
+            },
+          });
         }
+        const failures = get().cleanupProgress.failures;
+        set({
+          cleanupProgress: {
+            ...get().cleanupProgress,
+            processed: index + 1,
+            deleted: deletedCount,
+            skipped: failures.length,
+            message: `Processed ${index + 1} of ${candidates.length} sessions`,
+          },
+        });
+        await yieldToRenderer();
       }
 
       set((state) => ({
@@ -596,11 +739,56 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         selectedSession: deletedIds.has(state.selectedSession?.sessionId || '') ? null : state.selectedSession,
       }));
 
+      set({
+        cleanupProgress: {
+          ...get().cleanupProgress,
+          phase: 'refreshing',
+          currentSessionId: null,
+          currentProviderId: null,
+          message: 'Refreshing the session library…',
+        },
+      });
+      await yieldToRenderer();
       await get().refreshData();
+      const failures = get().cleanupProgress.failures;
+      set({
+        cleanupProgress: {
+          ...get().cleanupProgress,
+          phase: 'complete',
+          currentSessionId: null,
+          currentProviderId: null,
+          deleted: deletedCount,
+          skipped: failures.length,
+          message: failures.length
+            ? `Cleanup finished: ${deletedCount} removed, ${failures.length} skipped.`
+            : `Cleanup complete: ${deletedCount} sessions removed.`,
+          finishedAt: new Date().toISOString(),
+        },
+      });
       return deletedCount;
     } catch (error) {
       console.error('Failed to clean up ungrouped sessions:', error);
-      return 0;
+      const currentProgress = get().cleanupProgress;
+      const failure: CleanupFailure = {
+        sessionId: '',
+        providerId: 'cleanup',
+        error: error instanceof Error ? error.message : String(error),
+      };
+      set({
+        cleanupProgress: {
+          ...currentProgress,
+          phase: 'failed',
+          currentSessionId: null,
+          currentProviderId: null,
+          skipped: currentProgress.skipped,
+          failures: [...currentProgress.failures, failure],
+          message: currentProgress.deleted
+            ? `Cleanup stopped after removing ${currentProgress.deleted} sessions.`
+            : 'Cleanup stopped before it could finish.',
+          finishedAt: new Date().toISOString(),
+        },
+      });
+      return currentProgress.deleted;
     }
   },
 

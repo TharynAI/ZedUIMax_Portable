@@ -8,6 +8,7 @@ import TreeModeSelector from './components/TreeModeSelector';
 import ContextMenu from './components/ContextMenu';
 import MessageContextMenu from './components/MessageContextMenu';
 import ConfirmDialog from './components/ConfirmDialog';
+import CleanupProgressDialog from './components/CleanupProgressDialog';
 import SettingsDialog from './components/SettingsDialog';
 import TypePickerDialog from './components/TypePickerDialog';
 import InputDialog from './components/InputDialog';
@@ -276,6 +277,9 @@ function App() {
 
       {/* Confirmation dialog (portal) */}
       <ConfirmDialog />
+
+      {/* Ungrouped cleanup progress (persists when hidden) */}
+      <CleanupProgressDialog />
 
       {/* Settings dialog (portal) */}
       <SettingsDialog />

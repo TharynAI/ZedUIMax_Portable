@@ -32,12 +32,18 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
     providerFilter,
     setProviderFilter,
     cleanupOldestUngrouped,
+    cleanupProgress,
+    showCleanupProgress,
   } = useSessionStore();
   const { settings } = useSettingsStore();
   const [localQuery, setLocalQuery] = useState(searchQuery);
-  const [isCleaningUngrouped, setIsCleaningUngrouped] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const showConfirmDialog = useConfirmDialogStore((state) => state.show);
+
+  const cleanupIsRunning = cleanupProgress.phase === 'discovering'
+    || cleanupProgress.phase === 'deleting'
+    || cleanupProgress.phase === 'refreshing';
+  const cleanupHasResult = cleanupProgress.phase === 'complete' || cleanupProgress.phase === 'failed';
 
   // Expose focus method to parent
   useImperativeHandle(ref, () => ({
@@ -92,6 +98,11 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
   }, [messageSearchEnabled, setMessageSearchEnabled, localQuery, searchMessages, clearMessageSearch, setSearchQuery]);
 
   const handleCleanupUngrouped = useCallback(() => {
+    if (cleanupIsRunning || cleanupHasResult) {
+      showCleanupProgress();
+      return;
+    }
+
     const count = Math.max(1, Math.floor(settings.ungroupedCleanupBatchSize || 10));
 
     showConfirmDialog({
@@ -102,13 +113,17 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
       cancelLabel: 'Cancel',
       isDangerous: true,
       onConfirm: () => {
-        setIsCleaningUngrouped(true);
-        cleanupOldestUngrouped(count)
-          .catch((error) => console.error('Ungrouped cleanup failed:', error))
-          .finally(() => setIsCleaningUngrouped(false));
+        void cleanupOldestUngrouped(count);
       },
     });
-  }, [cleanupOldestUngrouped, settings.ungroupedCleanupBatchSize, showConfirmDialog]);
+  }, [
+    cleanupHasResult,
+    cleanupIsRunning,
+    cleanupOldestUngrouped,
+    settings.ungroupedCleanupBatchSize,
+    showCleanupProgress,
+    showConfirmDialog,
+  ]);
 
   // When message search is disabled from outside, reset to session search
   useEffect(() => {
@@ -181,12 +196,25 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
         ))}
         <button
           onClick={handleCleanupUngrouped}
-          disabled={isCleaningUngrouped}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs border bg-bg-tertiary text-black hover:text-text-primary border-transparent hover:border-red-500/60 disabled:opacity-50 disabled:cursor-not-allowed"
-          title={`Delete oldest ${settings.ungroupedCleanupBatchSize || 10} Ungrouped sessions from all providers`}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs border transition-colors ${
+            cleanupIsRunning
+              ? 'bg-accent/15 text-accent border-accent/40 shadow-glow-sm'
+              : cleanupHasResult
+                ? 'bg-bg-tertiary text-text-primary border-border hover:border-accent/50'
+                : 'bg-bg-tertiary text-black border-transparent hover:text-text-primary hover:border-red-500/60'
+          }`}
+          title={cleanupIsRunning || cleanupHasResult
+            ? 'Open cleanup status'
+            : `Delete oldest ${settings.ungroupedCleanupBatchSize || 10} Ungrouped sessions from all providers`}
         >
-          <Trash2 size={12} />
-          <span>{isCleaningUngrouped ? 'Cleaning' : 'Clean'}</span>
+          <Trash2 size={12} className={cleanupIsRunning ? 'animate-pulse' : ''} />
+          <span>
+            {cleanupIsRunning
+              ? `Cleaning ${cleanupProgress.processed}/${cleanupProgress.total || '…'}`
+              : cleanupHasResult
+                ? 'Cleanup result'
+                : 'Clean'}
+          </span>
         </button>
       </div>
     </div>
