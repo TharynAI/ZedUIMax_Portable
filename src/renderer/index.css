@@ -708,3 +708,709 @@ select option {
 }
 
 /* <END Tharyn | ZedUI Cyberpunk */
+
+/* START> Tharyn | ZedMax
+   2026-09-12
+   What: Bring the active session workspace into the restrained ZedCache flight-recorder family.
+   Why: ZedMax and ZedCache are companion operations tools and need one legible, dense visual language.
+   Expected: A compact amber-on-carbon shell with clear hierarchy, minimal glow, and stable Browse behavior.
+*/
+:root {
+  --zed-bg: #10110f;
+  --zed-rail: #171815;
+  --zed-panel: #1c1d19;
+  --zed-panel-raised: #23241f;
+  --zed-panel-deep: #131411;
+  --zed-line: #35362f;
+  --zed-line-strong: #4b4c42;
+  --zed-text: #f0ede4;
+  --zed-muted: #9b9a8e;
+  --zed-faint: #6d6d64;
+  --zed-amber: #e5a43b;
+  --zed-amber-strong: #ffb94c;
+  --zed-green: #7fb786;
+  --zed-red: #ce6f62;
+  --zed-blue: #7898a1;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--zed-bg);
+  color: var(--zed-text);
+  font-family: Bahnschrift, "Aptos Display", "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid var(--zed-amber-strong);
+  outline-offset: 2px;
+}
+
+#root {
+  background: var(--zed-bg);
+}
+
+.zed-app-shell {
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    var(--zed-bg);
+  background-size: 100% 28px;
+}
+
+.titlebar {
+  position: relative;
+  height: 38px;
+  border-bottom: 1px solid var(--zed-line);
+  background: #141512;
+}
+
+.titlebar-drag {
+  position: relative;
+  padding: 0 14px;
+}
+
+.titlebar-title {
+  gap: 7px;
+  font-family: Bahnschrift, "Aptos Display", "Segoe UI", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.titlebar-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 5px);
+  grid-template-rows: repeat(2, 5px);
+  gap: 2px;
+  width: 12px;
+  height: 12px;
+}
+
+.titlebar-mark i {
+  display: block;
+  background: var(--zed-amber);
+}
+
+.titlebar-mark i:nth-child(2),
+.titlebar-mark i:nth-child(3) {
+  opacity: 0.42;
+}
+
+.titlebar-text {
+  color: var(--zed-text);
+  font-weight: 700;
+}
+
+.titlebar-subtitle {
+  color: var(--zed-muted);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.titlebar-version {
+  margin-left: 2px;
+  color: var(--zed-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.titlebar-health {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translate(-50%, -50%);
+  color: var(--zed-muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.titlebar-health i,
+.zed-index-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zed-green);
+  box-shadow: 0 0 0 2px rgba(127, 183, 134, 0.10);
+}
+
+.titlebar-health.working i {
+  background: var(--zed-amber);
+}
+
+.titlebar-health.error {
+  color: var(--zed-red);
+}
+
+.titlebar-health.error i {
+  background: var(--zed-red);
+}
+
+.titlebar-btn {
+  width: 44px;
+  height: 38px;
+  color: var(--zed-muted);
+}
+
+.titlebar-btn:hover {
+  background: var(--zed-panel-raised);
+  color: var(--zed-text);
+}
+
+.titlebar-btn:active {
+  background: var(--zed-panel-deep);
+}
+
+.titlebar-btn-close:hover {
+  background: #7f342d;
+  color: var(--zed-text);
+}
+
+.zed-workspace {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.zed-nav-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  padding: 9px 7px 8px;
+  border-right: 1px solid var(--zed-line);
+  background: var(--zed-rail);
+}
+
+.zed-nav-rail button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 52px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--zed-faint);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.zed-nav-rail button:hover {
+  border-color: var(--zed-line);
+  background: var(--zed-panel);
+  color: var(--zed-text);
+}
+
+.zed-nav-rail button.active {
+  border-color: rgba(229, 164, 59, 0.35);
+  background: rgba(229, 164, 59, 0.07);
+  color: var(--zed-amber-strong);
+}
+
+.zed-nav-rail button.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 11px;
+  bottom: 11px;
+  width: 2px;
+  background: var(--zed-amber);
+}
+
+.zed-rail-spacer {
+  flex: 1;
+}
+
+.zed-rail-health {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 7px;
+  color: var(--zed-green);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.zed-main-view {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) 25px;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 18px 0;
+  overflow: hidden;
+}
+
+.zed-view-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+}
+
+.zed-view-heading h1 {
+  margin: 2px 0 1px;
+  color: var(--zed-text);
+  font-size: 23px;
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.zed-view-heading p {
+  margin: 0;
+  color: var(--zed-muted);
+  font-size: 11px;
+}
+
+.zed-eyebrow,
+.browse-section-label {
+  color: var(--zed-amber);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.zed-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+.zed-index-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  color: var(--zed-muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.zed-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.zed-metric {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: end;
+  min-width: 0;
+  min-height: 68px;
+  padding: 10px 12px 9px;
+  overflow: hidden;
+  border: 1px solid var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel);
+}
+
+.zed-metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--zed-blue);
+  opacity: 0.6;
+}
+
+.zed-metric.amber::before {
+  background: var(--zed-amber);
+  opacity: 1;
+}
+
+.zed-metric > span {
+  align-self: start;
+  color: var(--zed-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.zed-metric strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: var(--zed-text);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 27px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.zed-metric small {
+  color: var(--zed-faint);
+  font-size: 9px;
+}
+
+.zed-workbench-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+.zed-session-workbench {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.zed-session-index {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  border-right: 1px solid var(--zed-line);
+  background: var(--zed-panel);
+}
+
+.zed-index-tools {
+  padding: 10px;
+  border-bottom: 1px solid var(--zed-line);
+  background: var(--zed-panel-deep);
+}
+
+.zed-index-scroll {
+  min-height: 0;
+  padding: 8px 9px 12px;
+  overflow-y: auto;
+}
+
+.zed-session-review {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--zed-bg);
+}
+
+.zed-session-review > div {
+  padding: 13px;
+}
+
+.resize-handle {
+  width: 5px;
+  border-right: 1px solid transparent;
+}
+
+.resize-handle:hover {
+  background: rgba(229, 164, 59, 0.12);
+  border-right-color: rgba(229, 164, 59, 0.35);
+}
+
+.browse-tree-group {
+  padding-top: 6px;
+  padding-bottom: 5px;
+  color: var(--zed-muted);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+
+.browse-tree-group:hover {
+  color: var(--zed-text);
+}
+
+.browse-tree-session {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  padding-right: 9px;
+  border-color: var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.browse-tree-session:hover {
+  border-color: var(--zed-line-strong);
+  background: var(--zed-panel-raised);
+}
+
+.browse-tree-session.is-selected {
+  border-color: rgba(229, 164, 59, 0.72);
+  background: rgba(229, 164, 59, 0.075);
+  box-shadow: inset 2px 0 0 var(--zed-amber);
+}
+
+.browse-tree-session.is-multi-selected {
+  border-color: rgba(120, 152, 161, 0.65);
+  background: rgba(120, 152, 161, 0.08);
+}
+
+.browse-preview-card {
+  padding: 13px;
+  border-color: var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel);
+}
+
+.browse-empty-state {
+  border-color: var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+}
+
+.zed-preview-handle,
+.zed-status-handle {
+  display: inline-flex;
+  align-items: center;
+  max-width: 16rem;
+  overflow: hidden;
+  border: 1px solid rgba(229, 164, 59, 0.36);
+  border-radius: 3px;
+  background: rgba(229, 164, 59, 0.08);
+  color: var(--zed-amber-strong);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zed-preview-handle {
+  padding: 2px 6px;
+}
+
+.zed-status-handle {
+  padding: 1px 5px;
+}
+
+.zed-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  margin: 0 -18px;
+  padding: 0 14px;
+  border-top: 1px solid var(--zed-line);
+  background: #141512;
+  color: var(--zed-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+}
+
+.zed-status-bar > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.zed-status-bar > div > span:not(:last-child)::after {
+  content: "·";
+  margin: 0 7px;
+  color: var(--zed-line-strong);
+}
+
+.zed-status-product {
+  flex: none;
+  color: var(--zed-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--zed-panel-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  border-left-color: rgba(229, 164, 59, 0.20);
+  background: var(--zed-line);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  border-left-color: rgba(229, 164, 59, 0.42);
+  background: var(--zed-line-strong);
+}
+
+input,
+textarea,
+select {
+  border-color: var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  color: var(--zed-text);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: rgba(229, 164, 59, 0.74);
+  box-shadow: 0 0 0 1px rgba(229, 164, 59, 0.18);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--zed-faint);
+}
+
+select option {
+  background: var(--zed-panel);
+  color: var(--zed-text);
+}
+
+.btn {
+  border-radius: 4px;
+}
+
+.btn-primary {
+  background: var(--zed-amber);
+  color: var(--zed-bg);
+}
+
+.btn-primary:hover {
+  background: var(--zed-amber-strong);
+  box-shadow: none;
+}
+
+.btn-secondary {
+  border-color: var(--zed-line-strong);
+  color: var(--zed-muted);
+}
+
+.btn-secondary:hover {
+  border-color: rgba(229, 164, 59, 0.48);
+  background: rgba(229, 164, 59, 0.07);
+  color: var(--zed-text);
+  box-shadow: none;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  color: var(--zed-muted);
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn:hover {
+  border-color: rgba(229, 164, 59, 0.50);
+  background: var(--zed-panel-raised);
+  color: var(--zed-amber-strong);
+  filter: none;
+}
+
+.context-menu,
+.dialog-content,
+.card {
+  border-color: var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel);
+}
+
+.context-menu-item {
+  color: var(--zed-text);
+}
+
+.context-menu-item:hover {
+  background: rgba(229, 164, 59, 0.08);
+  color: var(--zed-amber-strong);
+}
+
+.tag-chip {
+  border-color: rgba(229, 164, 59, 0.28);
+  border-radius: 3px;
+  background: rgba(229, 164, 59, 0.08);
+  color: var(--zed-amber-strong);
+}
+
+.tag-chip:hover {
+  border-color: rgba(229, 164, 59, 0.46);
+  background: rgba(229, 164, 59, 0.12);
+  box-shadow: none;
+}
+
+.star {
+  color: var(--zed-amber-strong);
+  filter: none;
+}
+
+.rounded-cyber {
+  border-radius: 4px !important;
+}
+
+@media (max-width: 980px) {
+  .zed-main-view {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .zed-view-heading p,
+  .zed-index-state {
+    display: none;
+  }
+
+  .zed-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zed-metric {
+    min-height: 55px;
+  }
+
+  .zed-status-bar {
+    margin-right: -12px;
+    margin-left: -12px;
+  }
+}
+/* <END Tharyn | ZedMax */

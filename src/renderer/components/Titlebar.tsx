@@ -1,27 +1,31 @@
-/* START> Tharyn | ZedUI Cyberpunk
-    2025-12-28
-    What: Custom frameless titlebar component
-    Why: Enable cyberpunk aesthetic with custom window chrome
-    Expected: Draggable titlebar with styled minimize/maximize/close controls
-    2025-12-28
-    What: Simplify for titleBarOverlay - remove custom buttons
-    Why: Using native controls for Windows snap support
-    Expected: Branding only, native controls handle min/max/close
-*/
+import { useSessionStore } from '../stores/session-store';
 
 export default function Titlebar() {
+  const { sessions, isLoading, error } = useSessionStore();
   const handleMinimize = () => window.electronAPI.minimize();
   const handleMaximize = () => window.electronAPI.toggleMaximize();
   const handleClose = () => window.electronAPI.close();
+  const healthTone = error ? 'error' : isLoading ? 'working' : 'ready';
+  const healthLabel = error
+    ? 'Index warning'
+    : isLoading
+      ? 'Indexing sessions'
+      : `${sessions.length} sessions ready`;
 
   return (
     <div className="titlebar">
-      {/* Drag region with branding - native controls rendered by titleBarOverlay */}
       <div className="titlebar-drag">
         <div className="titlebar-title">
-          <span className="titlebar-icon">Z</span>
-          <span className="titlebar-text">ZEDUI | MAX</span>
-          <span className="titlebar-subtitle">SESSION LAUNCHER</span>
+          <span className="titlebar-mark" aria-hidden="true">
+            <i /><i /><i /><i />
+          </span>
+          <span className="titlebar-text">ZEDMAX</span>
+          <span className="titlebar-subtitle">SESSION CONTROL</span>
+          <span className="titlebar-version">v1.0</span>
+        </div>
+        <div className={`titlebar-health ${healthTone}`} title={error || healthLabel}>
+          <i />
+          <span>{healthLabel}</span>
         </div>
       </div>
       <div className="titlebar-controls" aria-label="window controls">
@@ -38,4 +42,3 @@ export default function Titlebar() {
     </div>
   );
 }
-// <END Tharyn | ZedUI Cyberpunk

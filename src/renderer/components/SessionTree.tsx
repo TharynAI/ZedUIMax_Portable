@@ -17,7 +17,7 @@ import { useInputDialogStore } from './InputDialog';
     Why: Inline ternary only handled 'codex' vs default-Claude; Cursor needs its own tint
     Expected: Cursor sessions show purple badge labelled 'Cursor'
 */
-import { getSessionDisplay } from '../providers/display';
+import { getSessionDisplay, getTowerHandleLabel } from '../providers/display';
 // <END Tharyn | CursorCLI
 
 interface TreeNode {
@@ -275,6 +275,7 @@ function TreeNodeRow({
 
   const session = node.session!;
   const isFavorite = session.annotation?.isFavorite;
+  const towerHandle = getTowerHandleLabel(session.annotation?.callSign, session.sessionId);
 
   // Handle favorite icon click - toggle favorite without selecting the row
   const handleFavoriteClick = (e: React.MouseEvent) => {
@@ -350,12 +351,12 @@ function TreeNodeRow({
                 Expected: A session the tower has named leads with that name; one it has not is
                       unchanged. Never written from here - the tower owns it.
             */}
-            {session.annotation?.callSign ? (
+            {towerHandle ? (
               <span
                 className="text-[10px] font-semibold text-accent truncate max-w-[14rem]"
-                title={`Call sign: ${session.annotation.callSign} (allocated by ZedTrafficControl)`}
+                title={`Handle: ${towerHandle} · Session: ${session.sessionId}`}
               >
-                {session.annotation.callSign}
+                {towerHandle}
               </span>
             ) : null}
             {/* <END Tharyn | ZedUIMax CallSign */}
@@ -411,7 +412,7 @@ function buildTree(
     case 'favorites':
       return buildFavoritesTree(sessions);
     default:
-      return buildTypeTree(sessions);
+      return buildTypeTree(sessions, typeNames, hideEmptyTypeGroups);
   }
 }
 // <END | Sphere -> Tharyn | CC

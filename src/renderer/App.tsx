@@ -6,27 +6,18 @@ import SessionPreview from './components/SessionPreview';
 import SearchBar, { SearchBarRef } from './components/SearchBar';
 import TreeModeSelector from './components/TreeModeSelector';
 import ContextMenu from './components/ContextMenu';
-import MessageContextMenu from './components/MessageContextMenu';
 import ConfirmDialog from './components/ConfirmDialog';
 import CleanupProgressDialog from './components/CleanupProgressDialog';
 import SettingsDialog from './components/SettingsDialog';
 import TypePickerDialog from './components/TypePickerDialog';
 import InputDialog from './components/InputDialog';
-import ProEngTab from './components/ProEngTab';
 import ManageTypesDialog from './components/ManageTypesDialog';
-/* START> Tharyn | ZedUI ViewTab
-    2026-01-01
-    What: Replace ConversationViewer with new ConversationView
-    Why: New component uses react-virtuoso for better performance
-    Expected: View tab displays conversations with smooth scrolling
-*/
-import ConversationView from './components/ConversationView';
-// <END Tharyn | ZedUI ViewTab
 import BulkActionBar from './components/BulkActionBar';
 import MessageSearchResults from './components/MessageSearchResults';
 import Titlebar from './components/Titlebar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { RefreshCw, Settings, FolderOpen, FileText, Sparkles } from 'lucide-react';
+import { Activity, Database, RefreshCw, Search, Settings } from 'lucide-react';
+import { getTowerHandleLabel } from './providers/display';
 /* START> Tharyn | ZedUI DisplayMenu
     2025-12-30
     What: Import DisplayMenu component
@@ -56,18 +47,8 @@ import LauncherMenu from './components/LauncherMenu';
 (window as any).__ZEDUI_SETTINGS__ = useSettingsStore;
 // <END | Sphere -> Tharyn | CC
 
-/* START> Tharyn | ZedUI ViewTab
-    2026-01-01
-    What: Rename 'edit' tab to 'view'
-    Why: Tab now focuses on viewing conversations, not editing
-    Expected: Tab type updated throughout app
-*/
-type Tab = 'browse' | 'view' | 'proeng';
-// <END Tharyn | ZedUI ViewTab
-
 function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('browse');
-  const { loadSessions, loadProjects, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
+  const { sessions, projects, loadSessions, loadProjects, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
   const { loadSettings, openDialog: openSettingsDialog, settings, setZoomLevel } = useSettingsStore();
   const searchBarRef = useRef<SearchBarRef>(null);
 
@@ -134,7 +115,6 @@ function App() {
   // unlike transform: scale() which only visually scales without affecting flexbox calculations
   const zoomStyle = useMemo(() => ({
     zoom: settings.zoomLevel,
-    height: '100%',
   }), [settings.zoomLevel]);
   // <END | Sphere -> Tharyn | CC
 
@@ -168,112 +148,54 @@ function App() {
     loadBranches();
   };
 
-  /* START> Tharyn | ZedUI Cyberpunk
-      2025-12-28
-      What: Add Titlebar outside zoom wrapper
-      Why: Titlebar should not scale with zoom, remain fixed at top
-      Expected: Frameless window with custom titlebar controls
-      2025-12-28
-      What: Restore titlebar for native Windows with titleBarOverlay
-      Why: titleBarOverlay works on native Windows, enables snap + custom branding
-      Expected: Native Windows snap with custom titlebar branding
-      2025-12-28
-      What: Add full-width separator below titlebar
-      Why: CSS border on titlebar was cut off by Windows native controls
-      Expected: Edge-to-edge separator line under titlebar + Windows buttons
+  /* START> Tharyn | ZedMax
+      2026-09-12
+      What: Replace the legacy horizontal tabs with the current ZedCache-family rail and dashboard shell.
+      Why: View and ProEng are deprecated; ZedMax now has one focused session-management workspace.
+      Expected: Browse, search, launch, display, refresh, settings, cleanup, and session actions remain available.
   */
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
-      {/* Custom Titlebar - branding only, native controls via titleBarOverlay */}
+    <div className="zed-app-shell">
       <Titlebar />
-      {/* Full-width separator below titlebar + Windows controls */}
-      <div className="h-px bg-border flex-shrink-0" />
 
-      {/* Zoomable content area */}
-      <div className="flex flex-col flex-1 overflow-hidden" style={zoomStyle}>
-        {/* Tab bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-bg-secondary border-b border-border">
-          <div className="flex gap-1">
-            <button
-              className={`tab ${activeTab === 'browse' ? 'active' : ''}`}
-              onClick={() => setActiveTab('browse')}
-            >
-              <div className="flex items-center gap-2">
-                <FolderOpen size={16} />
-                Browse
+      <div className="zed-workspace" style={zoomStyle}>
+        <NavigationRail
+          onFocusSearch={() => searchBarRef.current?.focus()}
+          onOpenSettings={openSettingsDialog}
+        />
+
+        <main className="zed-main-view">
+          <header className="zed-view-heading">
+            <div>
+              <span className="zed-eyebrow">Session operations</span>
+              <h1>Session Library</h1>
+              <p>Find, classify, and resume agent work across every harness.</p>
+            </div>
+            <div className="zed-header-actions">
+              <div className="zed-index-state" title="Sessions currently indexed in this view">
+                <i />
+                <span>{sessions.length} indexed</span>
               </div>
-            </button>
-            <button
-              className={`tab ${activeTab === 'view' ? 'active' : ''}`}
-              onClick={() => setActiveTab('view')}
-            >
-              <div className="flex items-center gap-2">
-                <FileText size={16} />
-                View
-              </div>
-            </button>
-            <button
-              className={`tab ${activeTab === 'proeng' ? 'active' : ''}`}
-              onClick={() => setActiveTab('proeng')}
-            >
-              <div className="flex items-center gap-2">
-                <Sparkles size={16} />
-                ProEng
-              </div>
-            </button>
+              <LauncherMenu />
+              <DisplayMenu />
+              <button className="icon-btn" onClick={handleRefresh} title="Refresh session index">
+                <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </header>
+
+          <SessionMetrics sessions={sessions} projectCount={projects.length} />
+
+          <div className="zed-workbench-wrap">
+            <BrowseTab searchBarRef={searchBarRef} />
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* START> Tharyn | ZedUI LauncherMenu
-                2026-01-11
-                What: Add LauncherMenu to toolbar
-                Why: Quick access to launch AI assistants
-                Expected: Rocket icon dropdown appears in toolbar
-            */}
-            <LauncherMenu />
-            {/* <END Tharyn | ZedUI LauncherMenu */}
-
-            {/* START> Tharyn | ZedUI DisplayMenu
-                2025-12-30
-                What: Add DisplayMenu to toolbar left of refresh button
-                Why: Allow quick resolution switching for displays
-                Expected: Monitor icon dropdown appears in toolbar
-            */}
-            <DisplayMenu />
-            {/* <END Tharyn | ZedUI DisplayMenu */}
-            <button
-              className="icon-btn"
-              onClick={handleRefresh}
-              title="Refresh"
-            >
-              <RefreshCw size={27} className={isLoading ? 'animate-spin' : ''} />
-            </button>
-            <button
-              className="icon-btn"
-              onClick={openSettingsDialog}
-              title="Settings"
-            >
-              <Settings size={27} />
-            </button>
-          </div>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 overflow-hidden">
-          {activeTab === 'browse' && <BrowseTab searchBarRef={searchBarRef} onSwitchToEdit={() => setActiveTab('view')} />}
-          {activeTab === 'view' && <ViewTab />}
-          {activeTab === 'proeng' && <ProEngTab />}
-        </div>
-
-        {/* Status bar */}
-        <StatusBar activeTab={activeTab} />
+          <StatusBar />
+        </main>
       </div>
 
       {/* Context menu (portal) */}
       <ContextMenu />
-
-      {/* Message context menu for View tab */}
-      <MessageContextMenu />
 
       {/* Confirmation dialog (portal) */}
       <ConfirmDialog />
@@ -297,12 +219,11 @@ function App() {
       <BulkActionBar />
     </div>
   );
-  // <END Tharyn | ZedUI Cyberpunk
+  // <END Tharyn | ZedMax
 }
 
 interface BrowseTabProps {
   searchBarRef: React.RefObject<SearchBarRef>;
-  onSwitchToEdit: () => void;
 }
 
 /* START> 2025-12-02 | Sphere -> Tharyn | CC
@@ -310,13 +231,13 @@ interface BrowseTabProps {
 * Show MessageSearchResults when message search is enabled
 * 2025-12-02 Initial implementation
 */
-function BrowseTab({ searchBarRef, onSwitchToEdit }: BrowseTabProps) {
+function BrowseTab({ searchBarRef }: BrowseTabProps) {
   const {
     messageSearchEnabled,
     messageSearchResults,
     messageSearchLoading,
     searchQuery,
-    setTargetMessage,
+    selectSession,
   } = useSessionStore();
   const { settings, saveSettings } = useSettingsStore();
   const [sidebarWidth, setSidebarWidth] = useState<number>(settings.sidebarWidth || 420);
@@ -351,23 +272,22 @@ function BrowseTab({ searchBarRef, onSwitchToEdit }: BrowseTabProps) {
   };
 
   const handleSelectMessageResult = useCallback((sessionId: string, messageIndex: number) => {
-    // Set the target message and switch to Edit tab
-    setTargetMessage(sessionId, messageIndex);
-    onSwitchToEdit();
-  }, [setTargetMessage, onSwitchToEdit]);
+    void messageIndex;
+    selectSession(sessionId);
+  }, [selectSession]);
 
   return (
-    <div className="flex h-full bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.08),_transparent_28%),linear-gradient(180deg,_rgba(32,32,32,0.98),_rgba(20,20,20,0.98))]">
+    <div className="zed-session-workbench">
       {/* Left panel - Tree or Message Search Results */}
       <div
-        className="flex flex-col border-r border-border bg-bg-secondary/35"
+        className="zed-session-index"
         style={{ width: sidebarWidth, minWidth: 240, maxWidth: 640 }}
       >
-        <div className="border-b border-border px-3 py-3 space-y-3 bg-bg-secondary/80">
+        <div className="zed-index-tools">
           <SearchBar ref={searchBarRef} />
           {!messageSearchEnabled && <TreeModeSelector />}
         </div>
-        <div className="flex-1 overflow-auto px-2 py-2">
+        <div className="zed-index-scroll">
           {messageSearchEnabled ? (
             <MessageSearchResults
               results={messageSearchResults}
@@ -390,7 +310,7 @@ function BrowseTab({ searchBarRef, onSwitchToEdit }: BrowseTabProps) {
       />
 
       {/* Right panel - Preview */}
-      <div className="flex-1 overflow-auto bg-[linear-gradient(180deg,_rgba(28,28,28,0.8),_rgba(18,18,18,0.92))]">
+      <div className="zed-session-review">
         <SessionPreview />
       </div>
     </div>
@@ -398,40 +318,90 @@ function BrowseTab({ searchBarRef, onSwitchToEdit }: BrowseTabProps) {
 }
 // <END | Sphere -> Tharyn | CC
 
-/* START> Tharyn | ZedUI ViewTab
-    2026-01-01
-    What: Rename EditTab to ViewTab, use new ConversationView
-    Why: View tab rebuilt with react-virtuoso for performance
-    Expected: Smooth conversation viewing experience
-*/
-function ViewTab() {
-  return <ConversationView />;
-}
-// <END Tharyn | ZedUI ViewTab
-
-function StatusBar({ activeTab }: { activeTab: Tab }) {
-  const { sessions, selectedSession } = useSessionStore();
-
-  if (activeTab === 'proeng') {
-    return (
-      <div className="flex items-center justify-between px-4 py-1 bg-bg-secondary border-t border-border text-sm text-text-secondary">
-        <div className="flex items-center gap-4">
-          <span>Prompt engineering workspace</span>
-          <span>Three-pane layout</span>
-        </div>
-        <div>
-          ZedUI Session Launcher
-        </div>
+function NavigationRail({
+  onFocusSearch,
+  onOpenSettings,
+}: {
+  onFocusSearch: () => void;
+  onOpenSettings: () => void;
+}) {
+  return (
+    <nav className="zed-nav-rail" aria-label="ZedMax navigation">
+      <button type="button" className="active" title="Session library" aria-current="page">
+        <Database size={18} />
+        <span>Sessions</span>
+      </button>
+      <button type="button" onClick={onFocusSearch} title="Focus session search">
+        <Search size={18} />
+        <span>Search</span>
+      </button>
+      <div className="zed-rail-spacer" />
+      <div className="zed-rail-health" title="Local session index ready">
+        <Activity size={14} />
+        <span>Ready</span>
       </div>
-    );
-  }
+      <button type="button" onClick={onOpenSettings} title="Open settings">
+        <Settings size={18} />
+        <span>Settings</span>
+      </button>
+    </nav>
+  );
+}
+
+function SessionMetrics({
+  sessions,
+  projectCount,
+}: {
+  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
+  projectCount: number;
+}) {
+  const grouped = sessions.filter((session) => (session.annotation?.type || 'Ungrouped') !== 'Ungrouped').length;
+  const favorites = sessions.filter((session) => session.annotation?.isFavorite).length;
+  const providers = new Set(sessions.map((session) => session.product || session.providerId)).size;
 
   return (
-    <div className="flex items-center justify-between px-4 py-1 bg-bg-secondary border-t border-border text-sm text-text-secondary">
-      <div className="flex items-center gap-4">
+    <section className="zed-metric-grid" aria-label="Visible session totals">
+      <Metric label="Visible sessions" value={sessions.length} detail="current filter" tone="amber" />
+      <Metric label="Projects" value={projectCount} detail="active roots" />
+      <Metric label="Grouped" value={grouped} detail="classified sessions" />
+      <Metric label="Harnesses" value={providers} detail={`${favorites} favorites`} />
+    </section>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  tone?: 'amber';
+}) {
+  return (
+    <article className={`zed-metric ${tone === 'amber' ? 'amber' : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function StatusBar() {
+  const { sessions, selectedSession } = useSessionStore();
+  const towerHandle = selectedSession
+    ? getTowerHandleLabel(selectedSession.annotation?.callSign, selectedSession.sessionId)
+    : null;
+
+  return (
+    <footer className="zed-status-bar">
+      <div>
         {selectedSession ? (
           <>
-            <span>Selected: {selectedSession.shortId}</span>
+            {towerHandle && <span className="zed-status-handle">{towerHandle}</span>}
+            <span>Session {selectedSession.shortId}</span>
             <span>{selectedSession.messageCount} messages</span>
             <span>{selectedSession.projectDisplay}</span>
           </>
@@ -439,10 +409,8 @@ function StatusBar({ activeTab }: { activeTab: Tab }) {
           <span>{sessions.length} sessions</span>
         )}
       </div>
-      <div>
-        ZedUI Session Launcher
-      </div>
-    </div>
+      <span className="zed-status-product">ZedMax · session control</span>
+    </footer>
   );
 }
 

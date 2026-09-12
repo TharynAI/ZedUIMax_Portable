@@ -17,6 +17,7 @@
     "test:launch-config": "node test/test-launch-config.js",
     "test:cleanup-progress": "electron test/test-cleanup-progress-electron.js --no-sandbox",
     "test:cleanup-progress:cdp": "node scripts/test-runner.js --file test/validate-cleanup-progress-cdp.js",
+    "test:zedmax-shell": "electron test/test-zedmax-shell-electron.js --no-sandbox",
     "migrate:local-data": "node scripts/migrate-local-data.js",
     "test:ui": "node scripts/test-runner.js",
     "package": "npm run build && electron-builder",

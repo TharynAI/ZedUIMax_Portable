@@ -164,7 +164,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
           className={`flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs transition-colors ${
             messageSearchEnabled
               ? 'bg-accent/20 text-accent border border-accent/50 shadow-glow-sm'
-              : 'bg-bg-tertiary text-black border border-transparent hover:text-text-primary hover:border-accent/30'
+              : 'bg-bg-tertiary text-text-secondary border border-transparent hover:text-text-primary hover:border-accent/30'
           }`}
           title="Search within message content"
         >
@@ -188,7 +188,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
             className={`px-2 py-1 rounded-cyber text-xs border ${
               providerFilter === opt.id
                 ? 'bg-accent/20 text-accent border-accent/60 shadow-glow-sm'
-                : 'bg-bg-tertiary text-black hover:text-text-primary border-transparent hover:border-accent/30'
+                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary border-transparent hover:border-accent/30'
             }`}
           >
             {opt.label}
@@ -201,7 +201,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
               ? 'bg-accent/15 text-accent border-accent/40 shadow-glow-sm'
               : cleanupHasResult
                 ? 'bg-bg-tertiary text-text-primary border-border hover:border-accent/50'
-                : 'bg-bg-tertiary text-black border-transparent hover:text-text-primary hover:border-red-500/60'
+                : 'bg-bg-tertiary text-text-secondary border-transparent hover:text-text-primary hover:border-red-500/60'
           }`}
           title={cleanupIsRunning || cleanupHasResult
             ? 'Open cleanup status'

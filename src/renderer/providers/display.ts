@@ -83,4 +83,36 @@ export const PROVIDER_FILTER_OPTIONS: ReadonlyArray<{ id: ProviderId | 'all'; la
   { id: 'codex', label: 'Codex' },
   { id: 'cursor', label: 'Cursor' },
 ];
+
+/* START> Tharyn | ZedMax
+    2026-09-12
+    What: Normalize tower-owned call signs for human-facing renderer surfaces.
+    Why: Older tower records may store `<handle>@<session-id>` even though the session ID is separate metadata.
+    Expected: Visible identity is handle-only; legitimate @ characters remain unless the suffix matches this session.
+*/
+export function getTowerHandleLabel(
+  callSign?: string | null,
+  sessionId?: string | null,
+): string | null {
+  const value = String(callSign ?? '').trim();
+  if (!value) return null;
+
+  const separatorIndex = value.lastIndexOf('@');
+  if (separatorIndex <= 0 || !sessionId) return value;
+
+  const suffix = value.slice(separatorIndex + 1).trim().toLowerCase();
+  const fullSessionId = sessionId.trim().toLowerCase();
+  const rawSessionId = fullSessionId.includes(':')
+    ? fullSessionId.slice(fullSessionId.indexOf(':') + 1)
+    : fullSessionId;
+  const suffixMatchesSession = suffix === fullSessionId
+    || suffix === rawSessionId
+    || (suffix.length >= 6 && rawSessionId.startsWith(suffix))
+    || (rawSessionId.length >= 6 && suffix.startsWith(rawSessionId));
+
+  return suffixMatchesSession
+    ? value.slice(0, separatorIndex).trim() || value
+    : value;
+}
+// <END Tharyn | ZedMax
 // <END Tharyn | CursorCLI

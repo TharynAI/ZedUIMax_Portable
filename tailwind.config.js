@@ -17,49 +17,50 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Backgrounds (warm neutral spectrum - matches titleBarOverlay #202020)
-        'bg-primary': '#1c1c1c',
-        'bg-secondary': '#252525',
-        'bg-tertiary': '#303030',
-        'bg-elevated': '#3a3a3a',
+        // ZedCache-family surfaces
+        'bg-primary': '#10110f',
+        'bg-secondary': '#1c1d19',
+        'bg-tertiary': '#23241f',
+        'bg-elevated': '#2a2b25',
 
         // Accents (orange/amber spectrum)
-        'accent': '#f59e0b',
-        'accent-hover': '#fbbf24',
-        'accent-muted': '#d97706',
+        'accent': '#e5a43b',
+        'accent-hover': '#ffb94c',
+        'accent-muted': '#bc8127',
 
         // Glow variants
-        'glow-amber': 'rgba(245, 158, 11, 0.4)',
-        'glow-amber-intense': 'rgba(245, 158, 11, 0.6)',
-        'accent-dim': 'rgba(245, 158, 11, 0.15)',
-        'accent-border': 'rgba(245, 158, 11, 0.3)',
+        'glow-amber': 'rgba(229, 164, 59, 0.22)',
+        'glow-amber-intense': 'rgba(229, 164, 59, 0.34)',
+        'accent-dim': 'rgba(229, 164, 59, 0.12)',
+        'accent-border': 'rgba(229, 164, 59, 0.32)',
 
         // Semantic colors
-        'success': '#22c55e',
-        'warning': '#eab308',
-        'error': '#ef4444',
-        'info': '#3b82f6',
+        'success': '#7fb786',
+        'warning': '#e5a43b',
+        'error': '#ce6f62',
+        'info': '#7898a1',
 
         // Text
-        'text-primary': '#f5f5f5',
-        'text-secondary': '#9ca3af',
-        'text-muted': '#6b7280',
+        'text-primary': '#f0ede4',
+        'text-secondary': '#9b9a8e',
+        'text-muted': '#6d6d64',
+        'text-tertiary': '#6d6d64',
 
         // Borders (warm neutral)
-        'border': '#404040',
-        'border-light': '#555555',
+        'border': '#35362f',
+        'border-light': '#4b4c42',
       },
       boxShadow: {
-        'glow-sm': '0 0 8px rgba(245, 158, 11, 0.3)',
-        'glow-md': '0 0 16px rgba(245, 158, 11, 0.4)',
-        'glow-lg': '0 0 24px rgba(245, 158, 11, 0.5)',
-        'glow-xl': '0 0 32px rgba(245, 158, 11, 0.6)',
-        'glow-pulse': '0 0 20px rgba(245, 158, 11, 0.3), 0 0 40px rgba(245, 158, 11, 0.1)',
-        'inner-glow': 'inset 0 0 12px rgba(245, 158, 11, 0.2)',
-        'cyber': '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 1px rgba(245, 158, 11, 0.5)',
+        'glow-sm': '0 0 0 1px rgba(229, 164, 59, 0.16)',
+        'glow-md': '0 6px 20px rgba(0, 0, 0, 0.30)',
+        'glow-lg': '0 10px 30px rgba(0, 0, 0, 0.38)',
+        'glow-xl': '0 16px 44px rgba(0, 0, 0, 0.46)',
+        'glow-pulse': '0 0 0 1px rgba(229, 164, 59, 0.22)',
+        'inner-glow': 'inset 0 0 0 1px rgba(229, 164, 59, 0.12)',
+        'cyber': '0 18px 56px rgba(0, 0, 0, 0.48)',
       },
       borderRadius: {
-        'cyber': '2px',
+        'cyber': '4px',
         'none': '0',
       },
       animation: {
@@ -82,8 +83,8 @@ export default {
         },
       },
       fontFamily: {
-        'mono': ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
-        'cyber': ['Share Tech Mono', 'JetBrains Mono', 'monospace'],
+        'mono': ['Cascadia Mono', 'Consolas', 'monospace'],
+        'cyber': ['Bahnschrift', 'Aptos Display', 'Segoe UI', 'sans-serif'],
       },
     },
   },

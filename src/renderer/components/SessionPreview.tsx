@@ -21,7 +21,7 @@ import {
     Why: Inline ternary only handled Claude/Codex
     Expected: Cursor sessions show purple 'Cursor' badge
 */
-import { getSessionDisplay } from '../providers/display';
+import { getSessionDisplay, getTowerHandleLabel } from '../providers/display';
 // <END Tharyn | CursorCLI
 
 function SessionPreview() {
@@ -68,6 +68,7 @@ function PreviewHeader({ session }: { session: any }) {
   const { toggleFavorite, updateAnnotation } = useSessionStore();
   const [editingType, setEditingType] = useState(false);
   const [typeValue, setTypeValue] = useState(session.annotation?.type || '');
+  const towerHandle = getTowerHandleLabel(session.annotation?.callSign, session.sessionId);
 
   const handleFavorite = () => {
     toggleFavorite(session.sessionId);
@@ -131,6 +132,14 @@ function PreviewHeader({ session }: { session: any }) {
           );
         })()}
         {/* <END Tharyn | CursorCLI */}
+        {towerHandle && (
+          <span
+            className="zed-preview-handle"
+            title={`Handle: ${towerHandle} · Session: ${session.sessionId}`}
+          >
+            {towerHandle}
+          </span>
+        )}
         {editingType ? (
           <div className="flex items-center gap-2">
             <input
@@ -250,7 +259,9 @@ function PreviewWorkingDirectory({ session }: { session: any }) {
       <div className="flex items-center gap-2">
         <div className="flex-1 flex items-center gap-2 rounded-cyber border border-border bg-bg-tertiary/60 px-3 py-2 text-sm">
           {dirExists === false && (
-            <AlertTriangle size={14} className="text-yellow-500 flex-shrink-0" title="Directory does not exist" />
+            <span title="Directory does not exist" aria-label="Directory does not exist">
+              <AlertTriangle size={14} className="text-yellow-500 flex-shrink-0" />
+            </span>
           )}
           <span className="truncate text-text-secondary" title={displayPath || cwd}>
             {displayPath || cwd || '(unknown)'}

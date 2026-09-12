@@ -93,8 +93,6 @@ export default function DisplayMenu() {
   };
 
   const renderSubmenu = (display: Display | null) => {
-    const displayKey = display?.deviceName || 'all';
-
     return (
       <div className="absolute left-full top-0 ml-1 bg-bg-secondary border border-border rounded shadow-lg min-w-[140px]">
         {RESOLUTIONS.map((res) => {

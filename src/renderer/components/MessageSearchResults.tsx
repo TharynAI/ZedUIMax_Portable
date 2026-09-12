@@ -7,9 +7,8 @@
  * 2025-12-02 Initial implementation
  */
 
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import type { MessageSearchResult } from '../types/session';
-import { useSessionStore } from '../stores/session-store';
 import { MessageSquare, User, Bot, ExternalLink } from 'lucide-react';
 
 interface MessageSearchResultsProps {
@@ -25,13 +24,10 @@ function MessageSearchResults({
   query,
   onSelectSession,
 }: MessageSearchResultsProps) {
-  const { selectSession } = useSessionStore();
-
   const handleClick = useCallback((result: MessageSearchResult) => {
-    // Select the session and notify parent to switch to Edit tab
-    selectSession(result.sessionId);
+    // Select the session and keep the user in the Browse workbench.
     onSelectSession(result.sessionId, result.messageIndex);
-  }, [selectSession, onSelectSession]);
+  }, [onSelectSession]);
 
   // Highlight the matched text in snippet
   const highlightMatch = useCallback((snippet: string, matchStart: number, matchLength: number) => {

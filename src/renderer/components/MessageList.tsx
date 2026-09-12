@@ -12,7 +12,7 @@
     Why: Quick scroll to top/bottom of conversation
     Expected: Floating buttons appear based on scroll position
 */
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import MessageBubble from './MessageBubble';
@@ -88,6 +88,12 @@ const MessageList = memo(function MessageList({
     return filtered;
   }, [messages, searchQuery]);
 
+  useEffect(() => {
+    if (targetIndex === null || targetIndex === undefined || !onTargetReached) return;
+    const timer = window.setTimeout(onTargetReached, 150);
+    return () => window.clearTimeout(timer);
+  }, [targetIndex, onTargetReached, displayMessages.length]);
+
   // Scroll handlers
   const scrollToTop = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: 0, behavior: 'smooth' });
@@ -102,7 +108,7 @@ const MessageList = memo(function MessageList({
 
   // Render individual message
   const renderMessage = useCallback(
-    (index: number, msg: SessionMessage) => {
+    (_index: number, msg: SessionMessage) => {
       const content = getMessageContent(msg);
 
       // Skip empty messages
