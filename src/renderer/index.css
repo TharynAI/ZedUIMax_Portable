@@ -1116,9 +1116,76 @@ textarea:focus-visible {
 }
 
 .zed-index-tools {
+  display: grid;
+  gap: 10px;
   padding: 10px;
   border-bottom: 1px solid var(--zed-line);
   background: var(--zed-panel-deep);
+}
+
+.zed-search-stack {
+  display: grid;
+  gap: 9px;
+}
+
+.zed-search-stack input {
+  height: 32px;
+}
+
+.zed-search-mode-row,
+.zed-provider-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zed-provider-row {
+  flex-wrap: wrap;
+}
+
+.zed-provider-row > button {
+  min-height: 26px;
+}
+
+.zed-filter-label {
+  margin-right: 2px;
+  color: var(--zed-faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.zed-clean-button {
+  margin-left: auto;
+}
+
+.zed-tree-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 0.72fr);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--zed-line);
+}
+
+.zed-tree-controls > *,
+.zed-tree-controls select,
+.zed-types-button,
+.zed-hide-empty {
+  height: 34px;
+  min-height: 34px;
+}
+
+.zed-tree-controls select,
+.zed-types-button,
+.zed-hide-empty {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.zed-types-button,
+.zed-hide-empty {
+  justify-content: center;
 }
 
 .zed-index-scroll {

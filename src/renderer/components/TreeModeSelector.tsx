@@ -28,9 +28,9 @@ function TreeModeSelector() {
   const openManageTypes = useManageTypesDialogStore((state) => state.open);
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="zed-tree-controls">
       {/* Tree mode selector */}
-      <div className="relative flex-1">
+      <div className="relative">
         <select
           value={treeMode}
           onChange={(e) => setTreeMode(e.target.value as TreeMode)}
@@ -70,7 +70,7 @@ function TreeModeSelector() {
       <button
         type="button"
         onClick={openManageTypes}
-        className="btn btn-secondary px-3 shrink-0"
+        className="zed-types-button btn btn-secondary px-3"
         title="Manage shared types"
       >
         <Blocks size={16} />
@@ -79,7 +79,7 @@ function TreeModeSelector() {
 
       {treeMode === 'type' && (
         <label
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-text-secondary bg-bg-tertiary border border-transparent rounded-cyber cursor-pointer hover:text-text-primary hover:border-accent/30"
+          className="zed-hide-empty flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary bg-bg-tertiary border border-transparent rounded-cyber cursor-pointer hover:text-text-primary hover:border-accent/30"
           title="Hide registered type groups that have no visible sessions"
         >
           <input

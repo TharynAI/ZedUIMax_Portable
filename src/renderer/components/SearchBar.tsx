@@ -133,7 +133,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
   }, [messageSearchEnabled]);
 
   return (
-    <div className="space-y-2">
+    <div className="zed-search-stack">
       <div className="relative">
         <Search
           size={18}
@@ -158,7 +158,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
       </div>
 
       {/* Message search toggle */}
-      <div className="flex items-center gap-2">
+      <div className="zed-search-mode-row">
         <button
           onClick={toggleMessageSearch}
           className={`flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs transition-colors ${
@@ -179,8 +179,8 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
       </div>
 
       {/* Provider filter */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-text-secondary">Provider:</span>
+      <div className="zed-provider-row">
+        <span className="zed-filter-label">Provider</span>
         {PROVIDER_FILTER_OPTIONS.map((opt) => (
           <button
             key={opt.id}
@@ -196,7 +196,7 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
         ))}
         <button
           onClick={handleCleanupUngrouped}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs border transition-colors ${
+          className={`zed-clean-button flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs border transition-colors ${
             cleanupIsRunning
               ? 'bg-accent/15 text-accent border-accent/40 shadow-glow-sm'
               : cleanupHasResult

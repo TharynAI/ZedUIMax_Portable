@@ -9,6 +9,10 @@
   const titlebar = document.querySelector('.titlebar');
   const rail = document.querySelector('.zed-nav-rail');
   const workbench = document.querySelector('.zed-session-workbench');
+  const providerRow = document.querySelector('.zed-provider-row');
+  const treeControls = document.querySelector('.zed-tree-controls');
+  const treeControlRects = Array.from(treeControls?.children || []).map(node => node.getBoundingClientRect());
+  const treeControlRows = new Set(treeControlRects.map(rect => Math.round(rect.top)));
   const buttonLabels = Array.from(document.querySelectorAll('button'))
     .map(button => button.textContent.trim());
   const visibleHandles = Array.from(document.querySelectorAll(
@@ -27,6 +31,10 @@
       noHorizontalOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
       zedCacheBackground: rootStyle.getPropertyValue('--zed-bg').trim() === '#10110f',
       handlesDoNotContainAt: visibleHandles.every(handle => !handle.includes('@')),
+      filterRowsSeparated: !!providerRow && !!treeControls
+        && treeControls.getBoundingClientRect().top - providerRow.getBoundingClientRect().bottom >= 8,
+      filterControlsUseTwoRows: treeControlRects.length === 4 && treeControlRows.size === 2,
+      filterControlHeightsAligned: treeControlRects.every(rect => Math.round(rect.height) === 34),
     },
     state: {
       sessions: state.sessions.length,
@@ -39,6 +47,12 @@
     viewport: {
       width: document.documentElement.clientWidth,
       height: document.documentElement.clientHeight,
+    },
+    filterGeometry: {
+      rowGap: providerRow && treeControls
+        ? Math.round(treeControls.getBoundingClientRect().top - providerRow.getBoundingClientRect().bottom)
+        : null,
+      controlHeights: treeControlRects.map(rect => Math.round(rect.height)),
     },
   };
 })()
