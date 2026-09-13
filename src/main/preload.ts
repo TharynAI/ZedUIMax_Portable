@@ -17,6 +17,11 @@ import type {
   ProviderDefaultsDetection,
   ProviderTestResult,
 } from '../shared/portable-config';
+import type {
+  AssistantLaunchResult,
+  LaunchClassificationInput,
+  LaunchClassificationNotice,
+} from '../shared/launch-classification';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -170,8 +175,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       Why: Allow UI to launch Claude, Codex, Gemini sessions
       Expected: launchAssistant triggers appropriate launcher script
   */
-  launchAssistant: (launcherId: string, mode: 'new' | 'resume', workspace?: string) =>
-    ipcRenderer.invoke('assistant:launch', launcherId, mode, workspace),
+  launchAssistant: (
+    launcherId: string,
+    mode: 'new' | 'resume',
+    workspace?: string,
+    classification?: LaunchClassificationInput,
+  ) => ipcRenderer.invoke('assistant:launch', launcherId, mode, workspace, classification),
+  getLaunchClassificationNotices: () =>
+    ipcRenderer.invoke('assistant:classification:list'),
+  dismissLaunchClassification: (id: string) =>
+    ipcRenderer.invoke('assistant:classification:dismiss', id),
+  onLaunchClassification: (callback: (notice: LaunchClassificationNotice) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, notice: LaunchClassificationNotice) => callback(notice);
+    ipcRenderer.on('assistant:classification', handler);
+    return () => ipcRenderer.removeListener('assistant:classification', handler);
+  },
   // <END Tharyn | ZedUI LauncherMenu
 
   // ProEng operations
@@ -291,10 +309,15 @@ export type ElectronAPI = {
       2026-01-11
       What: Launch assistant type declaration
   */
-  launchAssistant: (launcherId: string, mode: 'new' | 'resume', workspace?: string) => Promise<{
-    success: boolean;
-    error?: string;
-  }>;
+  launchAssistant: (
+    launcherId: string,
+    mode: 'new' | 'resume',
+    workspace?: string,
+    classification?: LaunchClassificationInput,
+  ) => Promise<AssistantLaunchResult>;
+  getLaunchClassificationNotices: () => Promise<LaunchClassificationNotice[]>;
+  dismissLaunchClassification: (id: string) => Promise<boolean>;
+  onLaunchClassification: (callback: (notice: LaunchClassificationNotice) => void) => () => void;
   // <END Tharyn | ZedUI LauncherMenu
 
   getProEngDefaults: () => Promise<ProEngDefaultsConfig & {

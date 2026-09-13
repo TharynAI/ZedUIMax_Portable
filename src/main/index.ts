@@ -3,6 +3,7 @@ import path from 'path';
 import { setupIpcHandlers, loadSettings, saveSettingsToFile } from './ipc-handlers';
 import { initDb } from './metadata-db';
 import { ensureRuntimeWritableDirs, initializeRuntimePaths } from './runtime-paths';
+import { startLaunchClassificationService } from './launch-classifier';
 
 let mainWindow: BrowserWindow | null = null;
 let isAppClosing = false;
@@ -227,6 +228,9 @@ app.whenReady().then(() => {
 
   // Create window
   createWindow();
+
+  // Resume durable category/summary matching for any Codex-family launch that survived an app restart.
+  startLaunchClassificationService();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

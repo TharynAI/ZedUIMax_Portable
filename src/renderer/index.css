@@ -1451,6 +1451,240 @@ select option {
   filter: none;
 }
 
+/* START> Tharyn | ZedUIMax Launch Classification
+    2026-09-12
+    What: ZedCache-family launch-classification dialog and durable status surface.
+    Why: Starting a named, grouped session is a deliberate operation and must remain readable
+         while the native CLI window is being created.
+    Expected: The host dims, required fields stay compact, and pending/failure state remains visible.
+*/
+.launch-classification-backdrop {
+  position: fixed;
+  inset: 32px 0 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 8, 7, 0.76);
+  backdrop-filter: blur(2px);
+}
+
+.launch-classification-dialog {
+  position: relative;
+  width: min(520px, calc(100vw - 48px));
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid var(--zed-line-strong);
+  border-radius: 5px;
+  background:
+    linear-gradient(135deg, rgba(229, 164, 59, 0.05), transparent 42%),
+    var(--zed-panel);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.54);
+}
+
+.launch-classification-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--zed-amber);
+}
+
+.launch-classification-kicker {
+  margin-bottom: 6px;
+  color: var(--zed-amber);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.launch-classification-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--zed-line);
+}
+
+.launch-classification-heading h2 {
+  margin: 0 0 4px;
+  color: var(--zed-text);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.launch-classification-heading p,
+.launch-classification-footer > p {
+  margin: 0;
+  color: var(--zed-muted);
+  font-size: 10px;
+}
+
+.launch-classification-heading > span {
+  flex: none;
+  padding: 5px 8px 4px;
+  border: 1px solid rgba(229, 164, 59, 0.32);
+  border-radius: 3px;
+  background: rgba(229, 164, 59, 0.07);
+  color: var(--zed-amber-strong);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.launch-classification-field {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.launch-classification-field > span {
+  color: var(--zed-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.launch-classification-field input {
+  width: 100%;
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--zed-line);
+  outline: none;
+  background: var(--zed-panel-deep);
+  color: var(--zed-text);
+  font-size: 12px;
+}
+
+.launch-classification-field small {
+  position: absolute;
+  right: 10px;
+  bottom: 11px;
+  color: var(--zed-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 8px;
+}
+
+.launch-classification-field:first-of-type input {
+  padding-right: 58px;
+}
+
+.launch-classification-error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--zed-red);
+  background: rgba(206, 111, 98, 0.08);
+  color: #e49a90;
+  font-size: 10px;
+}
+
+.launch-classification-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.launch-classification-footer > div {
+  display: flex;
+  gap: 7px;
+}
+
+.launch-classification-cancel,
+.launch-classification-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--zed-line-strong);
+  border-radius: 4px;
+  color: var(--zed-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.launch-classification-cancel:hover {
+  background: var(--zed-panel-raised);
+  color: var(--zed-text);
+}
+
+.launch-classification-submit {
+  border-color: var(--zed-amber);
+  background: var(--zed-amber);
+  color: var(--zed-bg);
+}
+
+.launch-classification-submit:hover:not(:disabled) {
+  border-color: var(--zed-amber-strong);
+  background: var(--zed-amber-strong);
+}
+
+.launch-classification-submit:disabled {
+  cursor: not-allowed;
+  border-color: var(--zed-line);
+  background: var(--zed-panel-raised);
+  color: var(--zed-faint);
+  opacity: 0.72;
+}
+
+.launch-classification-notice {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 90;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  width: 340px;
+  padding: 10px;
+  border: 1px solid var(--zed-line-strong);
+  border-left: 3px solid var(--zed-amber);
+  border-radius: 4px;
+  background: var(--zed-panel);
+  box-shadow: 0 15px 36px rgba(0, 0, 0, 0.38);
+}
+
+.launch-classification-notice.failed { border-left-color: var(--zed-red); }
+.launch-classification-notice.applied { border-left-color: var(--zed-green); }
+.launch-classification-notice.unsupported { border-left-color: var(--zed-amber); }
+.launch-classification-notice-icon { color: var(--zed-amber); }
+.launch-classification-notice.failed .launch-classification-notice-icon { color: var(--zed-red); }
+.launch-classification-notice.applied .launch-classification-notice-icon { color: var(--zed-green); }
+
+.launch-classification-notice strong {
+  display: block;
+  color: var(--zed-text);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.launch-classification-notice p {
+  margin: 2px 0 0;
+  color: var(--zed-muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.launch-classification-notice > button {
+  align-self: start;
+  padding: 2px;
+  color: var(--zed-faint);
+}
+
+.launch-classification-notice > button:hover { color: var(--zed-text); }
+/* <END Tharyn | ZedUIMax Launch Classification */
+
 .rounded-cyber {
   border-radius: 4px !important;
 }

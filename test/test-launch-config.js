@@ -72,6 +72,16 @@ try {
   assert(claude.displayCommand.includes('/home/portable/config/mcp.json'));
   assertNoLegacyPath(claude.displayCommand);
 
+  const classifiedClaude = buildClaudeLaunch('new', 'E:\\PortableWorkspace', undefined, '11111111-1111-4111-8111-111111111111');
+  assert(classifiedClaude.displayCommand.includes('--session-id'));
+  assert(classifiedClaude.displayCommand.includes('11111111-1111-4111-8111-111111111111'));
+
+  config.providers.claude.newSessionScriptWsl = '/home/portable/bin/launch-claude.sh';
+  fs.writeFileSync(settingsFile, JSON.stringify({ portableConfig: config }, null, 2), 'utf-8');
+  const classifiedScriptClaude = buildClaudeLaunch('new', 'E:\\PortableWorkspace', undefined, '33333333-3333-4333-8333-333333333333');
+  assert(classifiedScriptClaude.displayCommand.includes('/home/portable/bin/launch-claude.sh'));
+  assert(classifiedScriptClaude.displayCommand.includes('CLAUDE2_EXTRA_ARGS=--session-id 33333333-3333-4333-8333-333333333333'));
+
   const codex = buildCodexLaunch('resume', 'E:\\PortableWorkspace', 'codex-session-id');
   assert.strictEqual(codex.command, 'wt.exe');
   assert(codex.displayCommand.includes('C:\\PortableTools\\codex-resume.ps1'));
@@ -81,6 +91,10 @@ try {
   assert.strictEqual(cursor.command, 'wt.exe');
   assert(cursor.displayCommand.includes('/home/portable/bin/cursor-agent'));
   assertNoLegacyPath(cursor.displayCommand);
+
+  const classifiedCursor = buildAssistantLaunch('cursor', 'new', 'E:\\PortableWorkspace', '22222222-2222-4222-8222-222222222222');
+  assert(classifiedCursor.displayCommand.includes('--resume'));
+  assert(classifiedCursor.displayCommand.includes('22222222-2222-4222-8222-222222222222'));
 
   const gemini = buildAssistantLaunch('gemini3', 'new', 'E:\\PortableWorkspace');
   assert.strictEqual(gemini.command, 'powershell.exe');

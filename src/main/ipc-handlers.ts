@@ -33,7 +33,7 @@ import {
   linkBranch,
   getBranches,
 } from './metadata-db';
-import { continueSession, newSession, branchSession } from './launcher';
+import { continueSession, newSession, branchSession, mintCursorChatUuid } from './launcher';
 import { relocateSession, directoryExists } from './session-relocator';
 import {
   buildPortableSetupStatus,
@@ -43,7 +43,17 @@ import {
   runPortableDiagnostics,
   testProvider,
 } from './portable-config';
-import { buildAssistantLaunch } from './launch-config';
+import { buildAssistantLaunch, resolveAssistantWorkspace } from './launch-config';
+import type { AssistantLauncherId } from './launch-config';
+import {
+  applyExactLaunchClassification,
+  classificationTargetForLauncher,
+  dismissLaunchClassification,
+  failPendingLaunchClassification,
+  getVisibleLaunchClassificationNotices,
+  queuePendingLaunchClassification,
+  unsupportedClassificationNotice,
+} from './launch-classifier';
 import { getRuntimePaths } from './runtime-paths';
 import {
   createProEngSession,
@@ -65,6 +75,7 @@ import type {
   UpdateProEngSessionInput,
 } from '../shared/proeng';
 import type { PortableProviderConfig, PortableProviderKey } from '../shared/portable-config';
+import type { LaunchClassificationInput } from '../shared/launch-classification';
 
 function toWindowsPath(p: string): string {
   const m = p.match(/^\/mnt\/([a-zA-Z])\/(.*)$/);
@@ -589,15 +600,68 @@ export function setupIpcHandlers(): void {
       Why: Support launching Claude, Codex, and Gemini from menu
       Expected: Each assistant launches in Windows Terminal
   */
-  ipcMain.handle('assistant:launch', async (_, launcherId: string, mode: 'new' | 'resume', workspace?: string) => {
+  ipcMain.handle('assistant:launch', async (
+    _,
+    launcherId: string,
+    mode: 'new' | 'resume',
+    workspace?: string,
+    classification?: LaunchClassificationInput,
+  ) => {
+    let pendingId: string | null = null;
     try {
-      const launch = buildAssistantLaunch(launcherId as any, mode, workspace);
+      const typedLauncherId = launcherId as AssistantLauncherId;
+      const target = classificationTargetForLauncher(typedLauncherId);
+      const workspaceWin = resolveAssistantWorkspace(workspace);
+
+      if (mode === 'new' && target.providerId && !classification) {
+        throw new Error('Category and summary are required before launching a new indexed session.');
+      }
+
+      let nativeSessionId: string | undefined;
+      if (mode === 'new' && target.exactIdentity === 'claude') {
+        nativeSessionId = require('crypto').randomUUID();
+      } else if (mode === 'new' && target.exactIdentity === 'cursor') {
+        nativeSessionId = await mintCursorChatUuid();
+      }
+
+      let pendingNotice = null;
+      if (mode === 'new' && classification && target.providerId && !nativeSessionId) {
+        pendingNotice = queuePendingLaunchClassification(target, workspaceWin, classification);
+        pendingId = pendingNotice.id;
+      }
+
+      const launch = buildAssistantLaunch(typedLauncherId, mode, workspaceWin, nativeSessionId);
       await execFileAsync(launch.command, launch.args, { windowsHide: false });
-      return { success: true, command: launch.displayCommand };
+
+      if (mode === 'new' && classification && target.providerId && nativeSessionId) {
+        const applied = applyExactLaunchClassification(target, nativeSessionId, workspaceWin, classification);
+        return { success: true, command: launch.displayCommand, classification: applied };
+      }
+
+      if (pendingNotice) {
+        return { success: true, command: launch.displayCommand, classification: pendingNotice };
+      }
+
+      return {
+        success: true,
+        command: launch.displayCommand,
+        classification: mode === 'new' && !target.providerId
+          ? unsupportedClassificationNotice(target)
+          : undefined,
+      };
     } catch (error: any) {
       console.error(`Failed to launch ${launcherId} (${mode}):`, error);
+      if (pendingId) {
+        failPendingLaunchClassification(pendingId, `${launcherId} launch failed: ${error.message}`);
+      }
       return { success: false, error: error.message };
     }
+  });
+
+  ipcMain.handle('assistant:classification:list', async () => getVisibleLaunchClassificationNotices());
+  ipcMain.handle('assistant:classification:dismiss', async (_, id: string) => {
+    dismissLaunchClassification(id);
+    return true;
   });
   // <END Tharyn | ZedUI LauncherMenu
 }

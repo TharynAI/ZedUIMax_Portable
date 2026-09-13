@@ -306,7 +306,7 @@ function buildCursorBranchPrompt(
  * Mint a new Cursor chat UUID via `cursor-agent create-chat` (non-interactive).
  * Returns the trimmed UUID, or throws if the output is not a valid UUID.
  */
-async function mintCursorChatUuid(): Promise<string> {
+export async function mintCursorChatUuid(): Promise<string> {
   const launch = buildCursorCreateChatCommand();
   const { stdout } = await execFileAsync(launch.command, launch.args, { windowsHide: true });
   // Output may include leading/trailing whitespace; UUID is the only thing.

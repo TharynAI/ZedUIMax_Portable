@@ -73,6 +73,14 @@ export interface SessionInfo {
   // <END Tharyn | CursX
 }
 
+export interface SessionIdentity {
+  sessionId: string;
+  providerId: ProviderId;
+  product?: string;
+  filePath: string;
+  timestamp: Date;
+}
+
 export interface SessionDetails extends SessionInfo {
   messages: any[];
   version: string;
@@ -625,6 +633,110 @@ function getCursorSessions(projectsRoot: string, days: number = DEFAULT_DAYS): S
 
   return sessions;
 }
+
+/* START> Tharyn | ZedUIMax Launch Classification
+    2026-09-12
+    What: Inventory native session identities without parsing every transcript.
+    Why: A classified Codex/CursX launch must find the newly created native thread while ten or
+         more active agents may be writing large transcripts. Full-session scans would block the
+         Electron main process and make the launcher appear hung.
+    Expected: Lightweight filename/stat snapshots identify new Claude, Codex-product, or Cursor
+         sessions; only a shortlisted candidate is parsed later to verify its workspace.
+*/
+export function getSessionIdentities(providerId: ProviderId, product?: string): SessionIdentity[] {
+  const config = loadPortableConfigFromSettingsFile();
+  const identities: SessionIdentity[] = [];
+
+  if (providerId === 'claude') {
+    const root = getProviderRoot(config, 'claude');
+    if (!root || !fs.existsSync(root)) return identities;
+    let projectDirs: fs.Dirent[] = [];
+    try {
+      projectDirs = fs.readdirSync(root, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
+    } catch {
+      return identities;
+    }
+    for (const projectDir of projectDirs) {
+      const directory = path.join(root, projectDir.name);
+      let files: string[] = [];
+      try {
+        files = fs.readdirSync(directory)
+          .filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        const filePath = path.join(directory, file);
+        try {
+          identities.push({
+            sessionId: buildSessionId('claude', path.basename(file, '.jsonl')),
+            providerId: 'claude',
+            filePath,
+            timestamp: fs.statSync(filePath).mtime,
+          });
+        } catch {
+          continue;
+        }
+      }
+    }
+  } else if (providerId === 'codex') {
+    for (const root of codexFamilyRoots(config)) {
+      const rootProduct = root.product || 'codex';
+      if (product && rootProduct !== product) continue;
+      if (!root.dir || !fs.existsSync(root.dir)) continue;
+      walkCodexFiles(root.dir, (filePath, stat) => {
+        identities.push({
+          sessionId: buildSessionId('codex', codexRawIdFromFileName(filePath)),
+          providerId: 'codex',
+          product: rootProduct,
+          filePath,
+          timestamp: stat.mtime,
+        });
+      });
+    }
+  } else if (providerId === 'cursor') {
+    const root = getProviderRoot(config, 'cursor');
+    if (!root || !fs.existsSync(root)) return identities;
+    let projectSlugs: fs.Dirent[] = [];
+    try {
+      projectSlugs = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory());
+    } catch {
+      return identities;
+    }
+    for (const projectSlug of projectSlugs) {
+      const transcriptsDir = path.join(root, projectSlug.name, 'agent-transcripts');
+      let chatDirs: fs.Dirent[] = [];
+      try {
+        chatDirs = fs.readdirSync(transcriptsDir, { withFileTypes: true }).filter(entry => entry.isDirectory());
+      } catch {
+        continue;
+      }
+      for (const chatDir of chatDirs) {
+        const filePath = path.join(transcriptsDir, chatDir.name, `${chatDir.name}.jsonl`);
+        try {
+          const stat = fs.statSync(filePath);
+          identities.push({
+            sessionId: buildSessionId('cursor', chatDir.name),
+            providerId: 'cursor',
+            filePath,
+            timestamp: stat.mtime,
+          });
+        } catch {
+          continue;
+        }
+      }
+    }
+  }
+
+  const newestById = new Map<string, SessionIdentity>();
+  for (const identity of identities) {
+    const existing = newestById.get(identity.sessionId);
+    if (!existing || existing.timestamp < identity.timestamp) newestById.set(identity.sessionId, identity);
+  }
+  return Array.from(newestById.values());
+}
+// <END Tharyn | ZedUIMax Launch Classification
 
 function parseCursorSessionFile(filePath: string, slug: string, stat: fs.Stats): SessionInfo | null {
   const rawSessionId = path.basename(filePath, '.jsonl');

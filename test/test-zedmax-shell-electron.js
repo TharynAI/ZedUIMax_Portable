@@ -114,6 +114,31 @@ app.whenReady().then(async () => {
     && !window.__ZEDUI_STORE__.getState().isLoading`);
   console.log('PASS: session filter applies only on Enter and clears immediately at zero characters or X');
 
+  await evaluate(`document.querySelector('button[title="Launch Assistant"]').click()`);
+  await waitFor(`Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Claude2')`);
+  await evaluate(`(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(node => node.textContent.trim() === 'Claude2');
+    button.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  })()`);
+  await waitFor(`Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'New')`);
+  await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'New').click()`);
+  await waitFor(`document.querySelector('[role="dialog"] h2')?.textContent.includes('New Claude2 session')`);
+  assert.equal(await evaluate(`document.querySelector('.launch-classification-submit').disabled`), true);
+  await evaluate(`(() => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const summary = document.querySelector('input[placeholder="What is this session for?"]');
+    const category = document.querySelector('input[placeholder="Select or enter a category"]');
+    setValue.call(summary, 'Validate classified launches');
+    summary.dispatchEvent(new Event('input', { bubbles: true }));
+    setValue.call(category, 'App Development');
+    category.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(`document.querySelector('.launch-classification-submit')?.disabled === false`);
+  assert.equal(await evaluate(`document.querySelectorAll('.launch-classification-field').length`), 2);
+  await evaluate(`document.querySelector('.launch-classification-cancel').click()`);
+  await waitFor(`!document.querySelector('.launch-classification-dialog')`);
+  console.log('PASS: new indexed launches require category and summary before launch; Cancel launches nothing');
+
   await evaluate(`(() => {
     const session = {
       sessionId: 'codex:01a06ea4-1234-5678-9abc-def012345678',

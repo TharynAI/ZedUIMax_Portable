@@ -15,6 +15,8 @@
     "test": "node test/test-core.js",
     "test:runtime-paths": "node test/test-runtime-paths.js",
     "test:launch-config": "node test/test-launch-config.js",
+    "test:launch-classification": "node test/test-launch-classification.js",
+    "test:launch-classification:electron": "electron test/test-launch-classification-electron.js --no-sandbox",
     "test:cleanup-progress": "electron test/test-cleanup-progress-electron.js --no-sandbox",
     "test:cleanup-progress:cdp": "node scripts/test-runner.js --file test/validate-cleanup-progress-cdp.js",
     "test:zedmax-shell": "electron test/test-zedmax-shell-electron.js --no-sandbox",

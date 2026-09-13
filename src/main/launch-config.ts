@@ -64,7 +64,12 @@ function ensureWorkspace(workspaceWin: string): string {
   return workspaceWin;
 }
 
-function claudeCommandArgs(binaryPathWsl: string, mcpConfigPathWsl: string | undefined, resumeId?: string): string[] {
+function claudeCommandArgs(
+  binaryPathWsl: string,
+  mcpConfigPathWsl: string | undefined,
+  resumeId?: string,
+  newSessionId?: string,
+): string[] {
   const args = [
     'env',
     ...Object.entries(LAUNCH_ENV).map(([key, value]) => `${key}=${value}`),
@@ -77,18 +82,32 @@ function claudeCommandArgs(binaryPathWsl: string, mcpConfigPathWsl: string | und
   }
   if (resumeId) {
     args.push('--resume', resumeId);
+  } else if (newSessionId) {
+    args.push('--session-id', newSessionId);
   }
   return args;
 }
 
-function claudeShellCommand(binaryPathWsl: string, mcpConfigPathWsl: string | undefined, cwd: string, resumeId?: string): string {
+function claudeShellCommand(
+  binaryPathWsl: string,
+  mcpConfigPathWsl: string | undefined,
+  cwd: string,
+  resumeId?: string,
+  newSessionId?: string,
+): string {
   const envPrefix = Object.entries(LAUNCH_ENV).map(([key, value]) => `${key}=${value}`).join(' ');
   const mcpArg = mcpConfigPathWsl ? ` --mcp-config ${wslQuote(mcpConfigPathWsl)}` : '';
   const resumeArg = resumeId ? ` --resume ${wslQuote(resumeId)}` : '';
-  return `cd ${wslQuote(cwd)} && ${envPrefix} ${wslQuote(binaryPathWsl)} --permission-mode bypassPermissions${mcpArg}${resumeArg}`;
+  const sessionArg = !resumeId && newSessionId ? ` --session-id ${wslQuote(newSessionId)}` : '';
+  return `cd ${wslQuote(cwd)} && ${envPrefix} ${wslQuote(binaryPathWsl)} --permission-mode bypassPermissions${mcpArg}${resumeArg}${sessionArg}`;
 }
 
-export function buildClaudeLaunch(mode: 'new' | 'resume', cwd: string, resumeId?: string): LaunchCommand {
+export function buildClaudeLaunch(
+  mode: 'new' | 'resume',
+  cwd: string,
+  resumeId?: string,
+  newSessionId?: string,
+): LaunchCommand {
   const config = loadPortableConfigFromSettingsFile();
   const provider = config.providers.claude;
   if (!provider.enabled) {
@@ -98,7 +117,12 @@ export function buildClaudeLaunch(mode: 'new' | 'resume', cwd: string, resumeId?
   const wslCwd = toWslPath(cwd);
   const script = mode === 'resume' ? provider.resumeScriptWsl?.trim() : provider.newSessionScriptWsl?.trim();
   if (script) {
-    const scriptArgs = mode === 'resume' && resumeId ? [script, wslCwd, resumeId] : [script, wslCwd];
+    let scriptArgs = mode === 'resume' && resumeId ? [script, wslCwd, resumeId] : [script, wslCwd];
+    if (mode === 'new' && newSessionId) {
+      // The canonical Claude2 wrapper already consumes CLAUDE2_EXTRA_ARGS and forwards it to
+      // both Claude and ZedCache. Use one process-scoped assignment; no global config changes.
+      scriptArgs = ['env', `CLAUDE2_EXTRA_ARGS=--session-id ${newSessionId}`, script, wslCwd];
+    }
     if (mode === 'resume' && resumeId && provider.binaryPathWsl.trim()) {
       scriptArgs.push(provider.binaryPathWsl.trim());
       if (provider.mcpConfigPathWsl?.trim()) {
@@ -122,13 +146,24 @@ export function buildClaudeLaunch(mode: 'new' | 'resume', cwd: string, resumeId?
     throw new Error('Claude latest-resume requires a configured resume script.');
   }
 
-  const commandArgs = claudeCommandArgs(binaryPathWsl, provider.mcpConfigPathWsl?.trim(), mode === 'resume' ? resumeId : undefined);
+  const commandArgs = claudeCommandArgs(
+    binaryPathWsl,
+    provider.mcpConfigPathWsl?.trim(),
+    mode === 'resume' ? resumeId : undefined,
+    mode === 'new' ? newSessionId : undefined,
+  );
   const args = wtWslArgs(config, wslCwd, commandArgs);
   return {
     command: 'wt.exe',
     args,
     displayCommand: displayCommand('wt', args),
-    wslShellCommand: claudeShellCommand(binaryPathWsl, provider.mcpConfigPathWsl?.trim(), wslCwd, mode === 'resume' ? resumeId : undefined),
+    wslShellCommand: claudeShellCommand(
+      binaryPathWsl,
+      provider.mcpConfigPathWsl?.trim(),
+      wslCwd,
+      mode === 'resume' ? resumeId : undefined,
+      mode === 'new' ? newSessionId : undefined,
+    ),
   };
 }
 
@@ -283,13 +318,23 @@ export function buildCursorSeededBranchLaunch(cwd: string, resumeId: string, tem
   };
 }
 
-export function buildAssistantLaunch(launcherId: AssistantLauncherId, mode: AssistantLaunchMode, workspace?: string): LaunchCommand {
+export function resolveAssistantWorkspace(workspace?: string): string {
+  const config = loadPortableConfigFromSettingsFile();
+  return ensureWorkspace(workspace || config.defaultWorkspaceWin);
+}
+
+export function buildAssistantLaunch(
+  launcherId: AssistantLauncherId,
+  mode: AssistantLaunchMode,
+  workspace?: string,
+  newSessionId?: string,
+): LaunchCommand {
   const config = loadPortableConfigFromSettingsFile();
   const workspaceWin = ensureWorkspace(workspace || config.defaultWorkspaceWin);
 
   switch (launcherId) {
     case 'claude2':
-      return buildClaudeLaunch(mode, workspaceWin);
+      return buildClaudeLaunch(mode, workspaceWin, undefined, mode === 'new' ? newSessionId : undefined);
     case 'codex2':
       return buildCodexLaunch(mode, workspaceWin);
     /* START> Tharyn | CursX
@@ -307,7 +352,9 @@ export function buildAssistantLaunch(launcherId: AssistantLauncherId, mode: Assi
     }
     // <END Tharyn | CursX
     case 'cursor':
-      return buildCursorLaunch(mode, workspaceWin);
+      return mode === 'new' && newSessionId
+        ? buildCursorLaunch('resume', workspaceWin, newSessionId)
+        : buildCursorLaunch(mode, workspaceWin);
     case 'gemini3': {
       const provider = config.providers.geminiCli;
       if (!provider.enabled) {

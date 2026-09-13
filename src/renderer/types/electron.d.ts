@@ -16,6 +16,11 @@ import type {
   ProviderDefaultsDetection,
   ProviderTestResult,
 } from '../../shared/portable-config';
+import type {
+  AssistantLaunchResult,
+  LaunchClassificationInput,
+  LaunchClassificationNotice,
+} from '../../shared/launch-classification';
 
 // Type declaration for Electron API exposed via preload
 export interface ElectronAPI {
@@ -80,7 +85,15 @@ export interface ElectronAPI {
   runSetupDiagnostics: () => Promise<PortableDiagnosticsReport>;
   getDisplays: () => Promise<any>;
   setResolution: (deviceName: string, width: number, height: number) => Promise<any>;
-  launchAssistant: (launcherId: string, mode: 'new' | 'resume', workspace?: string) => Promise<{ success: boolean; error?: string }>;
+  launchAssistant: (
+    launcherId: string,
+    mode: 'new' | 'resume',
+    workspace?: string,
+    classification?: LaunchClassificationInput,
+  ) => Promise<AssistantLaunchResult>;
+  getLaunchClassificationNotices: () => Promise<LaunchClassificationNotice[]>;
+  dismissLaunchClassification: (id: string) => Promise<boolean>;
+  onLaunchClassification: (callback: (notice: LaunchClassificationNotice) => void) => () => void;
   // <END Tharyn | CursorCLI
 
   // Window controls
