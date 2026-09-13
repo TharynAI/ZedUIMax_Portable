@@ -3,10 +3,10 @@
 * Added toggle for searching within message content
 * 2025-12-02 Initial implementation
 */
-import React, { useState, useCallback, useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useSessionStore } from '../stores/session-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { Search, X, MessageSquare, Trash2 } from 'lucide-react';
+import { Search, X, Trash2 } from 'lucide-react';
 import { useConfirmDialogStore } from './ConfirmDialog';
 /* START> Tharyn | CursorCLI
     2026-05-03
@@ -25,10 +25,6 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
   const {
     searchQuery,
     setSearchQuery,
-    messageSearchEnabled,
-    setMessageSearchEnabled,
-    searchMessages,
-    clearMessageSearch,
     providerFilter,
     setProviderFilter,
     cleanupOldestUngrouped,
@@ -50,52 +46,25 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
     focus: () => inputRef.current?.focus(),
   }));
 
-  // Debounced search
-  const debounceRef = React.useRef<NodeJS.Timeout>();
-
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocalQuery(value);
 
-    // Clear existing timeout
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+    // Clearing the field removes the active filter immediately; non-empty edits wait for Enter.
+    if (value.length === 0) setSearchQuery('');
+  }, [setSearchQuery]);
 
-    // Set new timeout
-    debounceRef.current = setTimeout(() => {
-      if (messageSearchEnabled) {
-        searchMessages(value);
-      } else {
-        setSearchQuery(value);
-      }
-    }, 300);
-  }, [setSearchQuery, messageSearchEnabled, searchMessages]);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    setSearchQuery(localQuery.trim());
+  }, [localQuery, setSearchQuery]);
 
   const handleClear = useCallback(() => {
     setLocalQuery('');
-    if (messageSearchEnabled) {
-      clearMessageSearch();
-    } else {
-      setSearchQuery('');
-    }
-  }, [setSearchQuery, messageSearchEnabled, clearMessageSearch]);
-
-  const toggleMessageSearch = useCallback(() => {
-    const newEnabled = !messageSearchEnabled;
-    setMessageSearchEnabled(newEnabled);
-
-    // If enabling and there's a query, perform message search
-    if (newEnabled && localQuery.length >= 2) {
-      searchMessages(localQuery);
-    } else if (!newEnabled) {
-      // If disabling, clear message results and perform session search
-      clearMessageSearch();
-      if (localQuery) {
-        setSearchQuery(localQuery);
-      }
-    }
-  }, [messageSearchEnabled, setMessageSearchEnabled, localQuery, searchMessages, clearMessageSearch, setSearchQuery]);
+    setSearchQuery('');
+    inputRef.current?.focus();
+  }, [setSearchQuery]);
 
   const handleCleanupUngrouped = useCallback(() => {
     if (cleanupIsRunning || cleanupHasResult) {
@@ -125,13 +94,6 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
     showConfirmDialog,
   ]);
 
-  // When message search is disabled from outside, reset to session search
-  useEffect(() => {
-    if (!messageSearchEnabled && localQuery) {
-      setSearchQuery(localQuery);
-    }
-  }, [messageSearchEnabled]);
-
   return (
     <div className="zed-search-stack">
       <div className="relative">
@@ -142,39 +104,22 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
         <input
           ref={inputRef}
           type="text"
-          placeholder={messageSearchEnabled ? "Search in messages..." : "Search sessions..."}
+          placeholder="Filter sessions — press Enter"
           value={localQuery}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           className="pl-9 pr-10 py-1.5"
         />
         {localQuery && (
           <button
+            type="button"
             onClick={handleClear}
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-secondary hover:text-text-primary"
+            aria-label="Clear session filter"
+            title="Clear session filter"
           >
             <X size={18} />
           </button>
-        )}
-      </div>
-
-      {/* Message search toggle */}
-      <div className="zed-search-mode-row">
-        <button
-          onClick={toggleMessageSearch}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-cyber text-xs transition-colors ${
-            messageSearchEnabled
-              ? 'bg-accent/20 text-accent border border-accent/50 shadow-glow-sm'
-              : 'bg-bg-tertiary text-text-secondary border border-transparent hover:text-text-primary hover:border-accent/30'
-          }`}
-          title="Search within message content"
-        >
-          <MessageSquare size={12} />
-          <span>Search Messages</span>
-        </button>
-        {messageSearchEnabled && (
-          <span className="text-xs text-text-secondary">
-            Searches within conversation content
-          </span>
         )}
       </div>
 

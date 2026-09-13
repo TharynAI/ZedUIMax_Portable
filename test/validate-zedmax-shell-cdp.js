@@ -13,6 +13,12 @@
   const treeControls = document.querySelector('.zed-tree-controls');
   const treeControlRects = Array.from(treeControls?.children || []).map(node => node.getBoundingClientRect());
   const treeControlRows = new Set(treeControlRects.map(rect => Math.round(rect.top)));
+  const timeFilterCell = treeControls?.children[1];
+  const timeFilterSelect = timeFilterCell?.querySelector('select');
+  const timeFilterArrow = timeFilterCell?.querySelector('svg');
+  const timeCellRect = timeFilterCell?.getBoundingClientRect();
+  const timeSelectRect = timeFilterSelect?.getBoundingClientRect();
+  const timeArrowRect = timeFilterArrow?.getBoundingClientRect();
   const buttonLabels = Array.from(document.querySelectorAll('button'))
     .map(button => button.textContent.trim());
   const visibleHandles = Array.from(document.querySelectorAll(
@@ -35,6 +41,12 @@
         && treeControls.getBoundingClientRect().top - providerRow.getBoundingClientRect().bottom >= 8,
       filterControlsUseTwoRows: treeControlRects.length === 4 && treeControlRows.size === 2,
       filterControlHeightsAligned: treeControlRects.every(rect => Math.round(rect.height) === 34),
+      messageSearchControlAbsent: !buttonLabels.includes('Search Messages'),
+      timeFilterFillsCell: !!timeCellRect && !!timeSelectRect
+        && Math.abs(timeCellRect.width - timeSelectRect.width) <= 1,
+      timeFilterArrowInsideControl: !!timeSelectRect && !!timeArrowRect
+        && timeArrowRect.right < timeSelectRect.right
+        && timeArrowRect.left > timeSelectRect.left,
     },
     state: {
       sessions: state.sessions.length,

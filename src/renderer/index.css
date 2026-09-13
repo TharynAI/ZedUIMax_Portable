@@ -1132,7 +1132,6 @@ textarea:focus-visible {
   height: 32px;
 }
 
-.zed-search-mode-row,
 .zed-provider-row {
   display: flex;
   align-items: center;

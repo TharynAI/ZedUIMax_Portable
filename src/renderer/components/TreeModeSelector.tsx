@@ -53,7 +53,7 @@ function TreeModeSelector() {
         <select
           value={daysFilter}
           onChange={(e) => setDaysFilter(Number(e.target.value))}
-          className="appearance-none cursor-pointer py-1.5 pr-7"
+          className="w-full appearance-none cursor-pointer py-1.5 pr-7"
         >
           {DAYS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

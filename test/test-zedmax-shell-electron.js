@@ -63,6 +63,57 @@ app.whenReady().then(async () => {
   await win.loadFile(path.join(root, 'dist/renderer/index.html'));
   await waitFor(`!!window.__ZEDUI_STORE__ && !!document.querySelector('.zed-session-workbench')`);
 
+  const filterShell = await evaluate(`(() => ({
+    inputPresent: !!document.querySelector('input[placeholder="Filter sessions — press Enter"]'),
+    messageSearchButtonPresent: Array.from(document.querySelectorAll('button'))
+      .some(button => button.textContent.trim() === 'Search Messages'),
+  }))()`);
+  assert.deepEqual(filterShell, { inputPresent: true, messageSearchButtonPresent: false });
+
+  await evaluate(`(() => {
+    const input = document.querySelector('input[placeholder="Filter sessions — press Enter"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, 'tower');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(`document.querySelector('input[placeholder="Filter sessions — press Enter"]')?.value === 'tower'`);
+  assert.equal(await evaluate(`window.__ZEDUI_STORE__.getState().searchQuery`), '');
+
+  await evaluate(`document.querySelector('input[placeholder="Filter sessions — press Enter"]')
+    .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+  await waitFor(`window.__ZEDUI_STORE__.getState().searchQuery === 'tower'`);
+
+  await evaluate(`(() => {
+    const input = document.querySelector('input[placeholder="Filter sessions — press Enter"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, 't');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(`document.querySelector('input[placeholder="Filter sessions — press Enter"]')?.value === 't'`);
+  assert.equal(await evaluate(`window.__ZEDUI_STORE__.getState().searchQuery`), 'tower');
+
+  await evaluate(`(() => {
+    const input = document.querySelector('input[placeholder="Filter sessions — press Enter"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  await waitFor(`window.__ZEDUI_STORE__.getState().searchQuery === '' && !window.__ZEDUI_STORE__.getState().isLoading`);
+
+  await evaluate(`(() => {
+    const input = document.querySelector('input[placeholder="Filter sessions — press Enter"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, 'second');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  })()`);
+  await waitFor(`window.__ZEDUI_STORE__.getState().searchQuery === 'second'`);
+  await evaluate(`document.querySelector('button[aria-label="Clear session filter"]').click()`);
+  await waitFor(`window.__ZEDUI_STORE__.getState().searchQuery === ''
+    && document.querySelector('input[placeholder="Filter sessions — press Enter"]')?.value === ''
+    && !window.__ZEDUI_STORE__.getState().isLoading`);
+  console.log('PASS: session filter applies only on Enter and clears immediately at zero characters or X');
+
   await evaluate(`(() => {
     const session = {
       sessionId: 'codex:01a06ea4-1234-5678-9abc-def012345678',
