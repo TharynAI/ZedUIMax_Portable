@@ -62,6 +62,10 @@ export function createDefaultPortableConfig(): PortableProviderConfig {
     appRoot: paths.appRoot,
     dataRoot: paths.dataDir,
     defaultWorkspaceWin: userDocumentsPath(),
+    machine: {
+      machineName: os.hostname().trim() || 'Unknown machine',
+      machineId: null,
+    },
     wsl: {
       enabled: false,
       distroName: '',
@@ -121,6 +125,7 @@ export function normalizePortableConfig(value: unknown): PortableProviderConfig 
   const input = asObject(value);
   const providers = asObject(input.providers);
   const wsl = asObject(input.wsl);
+  const machine = asObject(input.machine);
 
   const claude = asObject(providers.claude);
   const codex = asObject(providers.codex);
@@ -139,6 +144,12 @@ export function normalizePortableConfig(value: unknown): PortableProviderConfig 
     appRoot: defaults.appRoot,
     dataRoot: defaults.dataRoot,
     defaultWorkspaceWin: asString(input.defaultWorkspaceWin, defaults.defaultWorkspaceWin),
+    machine: {
+      // The profile represents this running host. Refresh its display name from the OS while
+      // retaining a future durable machine id from the existing settings store.
+      machineName: defaults.machine.machineName,
+      machineId: asString(machine.machineId).trim() || null,
+    },
     wsl: {
       enabled: asBoolean(wsl.enabled, defaults.wsl.enabled),
       distroName: asString(wsl.distroName, defaults.wsl.distroName),

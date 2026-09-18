@@ -9,6 +9,7 @@ import {
   getSessions,
   getSessionDetails,
   getAllProjects,
+  getMachineProfiles,
   getResumeInfo,
   formatSize,
   formatAge,
@@ -75,6 +76,7 @@ import type {
   UpdateProEngSessionInput,
 } from '../shared/proeng';
 import type { PortableProviderConfig, PortableProviderKey } from '../shared/portable-config';
+import { matchesMachineProfile } from '../shared/portable-config';
 import type { LaunchClassificationInput } from '../shared/launch-classification';
 
 function toWindowsPath(p: string): string {
@@ -182,10 +184,12 @@ function enhanceSession(session: any) {
  */
 export function setupIpcHandlers(): void {
   // Session operations
-  ipcMain.handle('sessions:get', async (_, days?: number, limit?: number, providerFilter?: string[]) => {
-    const sessions = getSessions(providerFilter as any, days || DEFAULT_DAYS, limit || DEFAULT_LIMIT);
+  ipcMain.handle('sessions:get', async (_, days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => {
+    const sessions = getSessions(providerFilter as any, days || DEFAULT_DAYS, limit || DEFAULT_LIMIT, machineKey);
     return sessions.map(enhanceSession);
   });
+
+  ipcMain.handle('machines:list', async () => getMachineProfiles());
 
   ipcMain.handle('sessions:details', async (_, sessionId: string) => {
     const details = getSessionDetails(sessionId);
@@ -193,26 +197,24 @@ export function setupIpcHandlers(): void {
     return enhanceSession(details);
   });
 
-  ipcMain.handle('sessions:search', async (_, query: string, limit?: number) => {
+  ipcMain.handle('sessions:search', async (_, query: string, limit?: number, machineKey?: string) => {
     const results = search(query, limit || 20);
 
     // Enhance results with full session info
     return results.map(r => {
       const details = getSessionDetails(r.sessionId);
-      if (details) {
+      if (details && matchesMachineProfile({
+        machineName: details.machineName || '',
+        machineId: details.machineId ?? null,
+      }, machineKey)) {
         return enhanceSession(details);
       }
-      return {
-        sessionId: r.sessionId,
-        displaySummary: r.userSummary || r.autoSummary || r.firstMessage,
-        shortId: getShortId(r.sessionId),
-        rank: r.rank,
-      };
+      return null;
     }).filter(Boolean);
   });
 
-  ipcMain.handle('sessions:projects', async (_event, providerFilter?: string[]) => {
-    return getAllProjects(providerFilter as any);
+  ipcMain.handle('sessions:projects', async (_event, providerFilter?: string[], machineKey?: string) => {
+    return getAllProjects(providerFilter as any, machineKey);
   });
 
   // Annotation operations

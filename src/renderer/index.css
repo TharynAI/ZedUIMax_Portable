@@ -1451,6 +1451,44 @@ select option {
   filter: none;
 }
 
+.zed-machine-filter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px 0 9px;
+  border: 1px solid var(--zed-line);
+  border-radius: 4px;
+  background: var(--zed-panel-deep);
+  color: var(--zed-amber);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zed-machine-filter select {
+  width: min(190px, 22vw);
+  min-width: 92px;
+  height: 22px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--zed-text);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+}
+
+.zed-machine-filter select:focus-visible {
+  outline: 1px solid var(--zed-amber);
+  outline-offset: 1px;
+}
+
 /* START> Tharyn | ZedUIMax Launch Classification
     2026-09-12
     What: ZedCache-family launch-classification dialog and durable status surface.

@@ -24,6 +24,22 @@ export interface PortableWslConfig {
   userHomeUnc: string;
 }
 
+export interface MachineProfile {
+  machineName: string;
+  machineId: string | null;
+}
+
+export function machineProfileKey(profile: MachineProfile): string {
+  const machineId = profile.machineId?.trim();
+  return machineId
+    ? `id:${machineId}`
+    : `name:${profile.machineName.trim().toLowerCase()}`;
+}
+
+export function matchesMachineProfile(profile: MachineProfile, selectedKey?: string): boolean {
+  return !selectedKey || machineProfileKey(profile) === selectedKey;
+}
+
 export interface PortableProviderBase {
   enabled: boolean;
   status: ProviderPathStatus;
@@ -67,6 +83,7 @@ export interface PortableProviderConfig {
   appRoot: string;
   dataRoot: string;
   defaultWorkspaceWin: string;
+  machine: MachineProfile;
   wsl: PortableWslConfig;
   providers: {
     claude: ClaudeProviderConfig;

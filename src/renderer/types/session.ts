@@ -24,6 +24,8 @@ export interface Session {
   cwd: string;                 // Working directory
   fileSize: number;            // File size in bytes
   filePath: string;            // Full path to .jsonl file
+  machineName: string;         // Trusted hostname of the machine that owns this transcript
+  machineId: string | null;    // Stable device id when available
 }
 
 // User annotation from SQLite
@@ -58,6 +60,8 @@ export interface ProjectInfo {
   sessionCount: number;
   lastActivity: Date | null;
   providerId: 'claude' | 'codex' | 'cursor';
+  machineName: string;
+  machineId: string | null;
 }
 
 // Session details with full message history

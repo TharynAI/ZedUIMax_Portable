@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import type { SessionViewModel, TagInfo, ProjectInfo, BranchInfo, MessageSearchResult } from '../types/session';
 import { useSettingsStore } from './settings-store';
+import { machineProfileKey, type MachineProfile } from '../../shared/portable-config';
 
 type ProviderFilter = 'all' | 'claude' | 'codex' | 'cursor';
 
@@ -77,6 +78,8 @@ interface SessionStore {
   tags: TagInfo[];
   types: TagInfo[];
   branches: BranchInfo[];  // Branch relationships from database
+  machineProfiles: MachineProfile[];
+  selectedMachineKey: string | null;
   isLoading: boolean;
   error: string | null;
 // <END | Sphere -> Tharyn | CC
@@ -103,6 +106,7 @@ interface SessionStore {
   // Actions
   loadSessions: () => Promise<void>;
   loadProjects: () => Promise<void>;
+  loadMachineProfiles: () => Promise<void>;
   loadTags: () => Promise<void>;
   loadTypes: () => Promise<void>;
   loadBranches: () => Promise<void>;  // Load branch relationships
@@ -111,6 +115,7 @@ interface SessionStore {
   setTreeMode: (mode: TreeMode) => void;
   setDaysFilter: (days: number) => void;
   setProviderFilter: (provider: ProviderFilter) => void;
+  setMachineFilter: (machineKey: string) => Promise<void>;
   refreshData: () => Promise<void>;
 
   // Session actions
@@ -176,6 +181,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   tags: [],
   types: [],
   branches: [],
+  machineProfiles: [],
+  selectedMachineKey: null,
   isLoading: false,
   error: null,
   selectedSessionId: null,
@@ -199,6 +206,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const phase = get().cleanupProgress.phase;
     if (phase === 'discovering' || phase === 'deleting' || phase === 'refreshing') return;
     set({ cleanupDialogOpen: false, cleanupProgress: { ...IDLE_CLEANUP_PROGRESS } });
+  },
+
+  loadMachineProfiles: async () => {
+    try {
+      const machineProfiles = await window.electronAPI.getMachineProfiles();
+      const current = get().selectedMachineKey;
+      const selectedMachineKey = current && machineProfiles.some((profile) => machineProfileKey(profile) === current)
+        ? current
+        : machineProfiles[0] ? machineProfileKey(machineProfiles[0]) : null;
+      set({ machineProfiles, selectedMachineKey });
+    } catch (error) {
+      console.error('Failed to load machine profiles:', error);
+      set({ machineProfiles: [], selectedMachineKey: null });
+    }
   },
 
   // Load sessions from main process
@@ -229,15 +250,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // <END Tharyn | CursorCLI
     set({ isLoading: true, error: null });
     try {
-      const { daysFilter, searchQuery, providerFilter } = get();
+      const { daysFilter, searchQuery, providerFilter, selectedMachineKey } = get();
       const providerArg = providerFilter === 'all' ? undefined : [providerFilter];
 
       let sessions: SessionViewModel[];
 
       if (searchQuery) {
-        sessions = await window.electronAPI.searchSessions(searchQuery);
+        sessions = await window.electronAPI.searchSessions(searchQuery, undefined, selectedMachineKey || undefined);
       } else {
-        sessions = await window.electronAPI.getSessions(daysFilter, undefined, providerArg);
+        sessions = await window.electronAPI.getSessions(daysFilter, undefined, providerArg, selectedMachineKey || undefined);
       }
 
       // Convert timestamps to Date objects
@@ -267,9 +288,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   // Load projects
   loadProjects: async () => {
     try {
-      const { providerFilter } = get();
+      const { providerFilter, selectedMachineKey } = get();
       const providerArg = providerFilter === 'all' ? undefined : [providerFilter];
-      const projects = await window.electronAPI.getProjects(providerArg);
+      const projects = await window.electronAPI.getProjects(providerArg, selectedMachineKey || undefined);
       set({
         projects: projects.map((p: any) => ({
           ...p,
@@ -368,6 +389,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // <END Tharyn | CursorCLI
     get().loadSessions();
     get().loadProjects();
+  },
+
+  setMachineFilter: async (machineKey) => {
+    if (machineKey === get().selectedMachineKey) return;
+    set({ selectedMachineKey: machineKey, selectedSessionId: null, selectedSession: null });
+    await Promise.all([get().loadSessions(), get().loadProjects()]);
   },
 
   // Refresh all data

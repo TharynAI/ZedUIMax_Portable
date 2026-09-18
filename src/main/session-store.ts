@@ -24,7 +24,12 @@ import {
 } from './provider-utils';
 import { buildClaudeLaunch, buildCodexLaunch, buildCursorLaunch } from './launch-config';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
-import type { PortableProviderConfig } from '../shared/portable-config';
+import {
+  machineProfileKey,
+  matchesMachineProfile,
+  type MachineProfile,
+  type PortableProviderConfig,
+} from '../shared/portable-config';
 /* START> Tharyn | CursorCLI
     2026-05-04
     What: Import metadata-db cwd_override helpers and deleteSessionMetadata
@@ -41,6 +46,8 @@ export interface ProjectInfo {
   sessionCount: number;
   lastActivity: Date | null;
   providerId: ProviderId;
+  machineName: string;
+  machineId: string | null;
 }
 
 export interface SessionInfo {
@@ -57,6 +64,9 @@ export interface SessionInfo {
   cwd: string;
   filePath: string;
   fileSize: number;
+  // Parsers build local records before the aggregation seam attaches trusted host identity.
+  machineName?: string;
+  machineId?: string | null;
   /* START> Tharyn | CursX
       2026-09-07
       What: Which agent PRODUCT this session belongs to, e.g. `codex` or `cursx`.
@@ -84,6 +94,32 @@ export interface SessionIdentity {
 export interface SessionDetails extends SessionInfo {
   messages: any[];
   version: string;
+}
+
+function withMachineProfile<T extends object>(value: T, profile: MachineProfile): T & MachineProfile {
+  return {
+    ...value,
+    machineName: profile.machineName,
+    machineId: profile.machineId,
+  };
+}
+
+function profileFromSession(session: SessionInfo): MachineProfile | null {
+  return session.machineName
+    ? { machineName: session.machineName, machineId: session.machineId ?? null }
+    : null;
+}
+
+export function filterSessionsByMachine(sessions: SessionInfo[], selectedKey?: string): SessionInfo[] {
+  if (!selectedKey) return sessions;
+  return sessions.filter((session) => {
+    const profile = profileFromSession(session);
+    return profile !== null && matchesMachineProfile(profile, selectedKey);
+  });
+}
+
+export function getMachineProfiles(): MachineProfile[] {
+  return [loadPortableConfigFromSettingsFile().machine];
 }
 
 function getProviderRoot(config: PortableProviderConfig, providerId: ProviderId): string {
@@ -318,12 +354,13 @@ export function formatDate(timestamp: Date): string {
 /**
  * Scan ~/.claude/projects/ for all project directories.
  */
-export function getAllProjects(providerFilter?: ProviderId[]): ProjectInfo[] {
-  const sessions = getSessions(providerFilter, DEFAULT_DAYS, DEFAULT_LIMIT * 5);
+export function projectsFromSessions(sessions: SessionInfo[]): ProjectInfo[] {
   const map = new Map<string, ProjectInfo>();
 
   for (const s of sessions) {
-    const key = `${s.providerId}:${s.projectPath}`;
+    const profile = profileFromSession(s);
+    if (!profile) continue;
+    const key = `${machineProfileKey(profile)}:${s.providerId}:${s.projectPath}`;
     const existing = map.get(key);
     if (existing) {
       existing.sessionCount += 1;
@@ -337,6 +374,8 @@ export function getAllProjects(providerFilter?: ProviderId[]): ProjectInfo[] {
         sessionCount: 1,
         lastActivity: s.timestamp,
         providerId: s.providerId,
+        machineName: profile.machineName,
+        machineId: profile.machineId,
       });
     }
   }
@@ -346,6 +385,11 @@ export function getAllProjects(providerFilter?: ProviderId[]): ProjectInfo[] {
     if (!b.lastActivity) return -1;
     return b.lastActivity.getTime() - a.lastActivity.getTime();
   });
+}
+
+export function getAllProjects(providerFilter?: ProviderId[], selectedMachineKey?: string): ProjectInfo[] {
+  const sessions = getSessions(providerFilter, DEFAULT_DAYS, DEFAULT_LIMIT * 5, selectedMachineKey);
+  return projectsFromSessions(sessions);
 }
 
 /**
@@ -506,7 +550,8 @@ function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS): S
 export function getSessions(
   providerFilter?: ProviderId[],
   days: number = DEFAULT_DAYS,
-  limit: number = DEFAULT_LIMIT
+  limit: number = DEFAULT_LIMIT,
+  selectedMachineKey?: string,
 ): SessionInfo[] {
   /* START> Tharyn | CursorCLI
       2026-05-03
@@ -568,7 +613,10 @@ export function getSessions(
   }
   // <END Tharyn | CursorCLI
 
-  sessions = dedupeSessionsById(sessions);
+  sessions = dedupeSessionsById(sessions)
+    .map((session) => withMachineProfile(session, config.machine));
+  const effectiveMachineKey = selectedMachineKey || machineProfileKey(config.machine);
+  sessions = filterSessionsByMachine(sessions, effectiveMachineKey);
   sessions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
   return sessions.slice(0, limit);
@@ -974,6 +1022,7 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
       Expected: If cwd_override exists for this sessionId, details.cwd reflects it; else unchanged
   */
   if (details) {
+    details = withMachineProfile(details, config.machine);
     try {
       const override = getCwdOverride(sessionId);
       if (override) {

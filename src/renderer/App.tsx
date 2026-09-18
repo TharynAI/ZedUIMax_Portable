@@ -18,6 +18,7 @@ import Titlebar from './components/Titlebar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Activity, Database, RefreshCw, Search, Settings } from 'lucide-react';
 import { getTowerHandleLabel } from './providers/display';
+import { machineProfileKey } from '../shared/portable-config';
 /* START> Tharyn | ZedUI DisplayMenu
     2025-12-30
     What: Import DisplayMenu component
@@ -48,14 +49,13 @@ import LauncherMenu from './components/LauncherMenu';
 // <END | Sphere -> Tharyn | CC
 
 function App() {
-  const { sessions, projects, loadSessions, loadProjects, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
+  const { sessions, projects, loadSessions, loadProjects, loadMachineProfiles, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
   const { loadSettings, openDialog: openSettingsDialog, settings, setZoomLevel } = useSettingsStore();
   const searchBarRef = useRef<SearchBarRef>(null);
 
   // Load data on mount
   useEffect(() => {
-    loadSessions();
-    loadProjects();
+    void loadMachineProfiles().then(() => Promise.all([loadSessions(), loadProjects()]));
     loadTags();
     loadTypes();
     loadBranches();
@@ -172,6 +172,7 @@ function App() {
               <p>Find, classify, and resume agent work across every harness.</p>
             </div>
             <div className="zed-header-actions">
+              <MachineSelector />
               <div className="zed-index-state" title="Sessions currently indexed in this view">
                 <i />
                 <span>{sessions.length} indexed</span>
@@ -220,6 +221,32 @@ function App() {
     </div>
   );
   // <END Tharyn | ZedMax
+}
+
+function MachineSelector() {
+  const machineProfiles = useSessionStore((state) => state.machineProfiles);
+  const selectedMachineKey = useSessionStore((state) => state.selectedMachineKey);
+  const setMachineFilter = useSessionStore((state) => state.setMachineFilter);
+
+  if (machineProfiles.length === 0 || !selectedMachineKey) return null;
+
+  const selectedProfile = machineProfiles.find((profile) => machineProfileKey(profile) === selectedMachineKey);
+  return (
+    <label className="zed-machine-filter" title={selectedProfile?.machineName || 'Machine'}>
+      <span>Machine</span>
+      <select
+        aria-label="Machine"
+        value={selectedMachineKey}
+        onChange={(event) => void setMachineFilter(event.target.value)}
+      >
+        {machineProfiles.map((profile) => (
+          <option key={machineProfileKey(profile)} value={machineProfileKey(profile)}>
+            {profile.machineName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 interface BrowseTabProps {

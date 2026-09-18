@@ -10,6 +10,7 @@ import type {
 } from '../shared/proeng';
 import type {
   PortableDiagnosticsReport,
+  MachineProfile,
   PortableProviderConfig,
   PortableProviderKey,
   PortableSetupStatus,
@@ -27,14 +28,16 @@ import type {
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // Session operations
-  getSessions: (days?: number, limit?: number, providerFilter?: string[]) =>
-    ipcRenderer.invoke('sessions:get', days, limit, providerFilter),
+  getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) =>
+    ipcRenderer.invoke('sessions:get', days, limit, providerFilter, machineKey),
+  getMachineProfiles: () =>
+    ipcRenderer.invoke('machines:list'),
   getSessionDetails: (sessionId: string) =>
     ipcRenderer.invoke('sessions:details', sessionId),
-  searchSessions: (query: string, limit?: number) =>
-    ipcRenderer.invoke('sessions:search', query, limit),
-  getProjects: (providerFilter?: string[]) =>
-    ipcRenderer.invoke('sessions:projects', providerFilter),
+  searchSessions: (query: string, limit?: number, machineKey?: string) =>
+    ipcRenderer.invoke('sessions:search', query, limit, machineKey),
+  getProjects: (providerFilter?: string[], machineKey?: string) =>
+    ipcRenderer.invoke('sessions:projects', providerFilter, machineKey),
   deleteSession: (sessionId: string) =>
     ipcRenderer.invoke('sessions:delete', sessionId),
 
@@ -215,10 +218,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // Type declaration for the exposed API
 export type ElectronAPI = {
-  getSessions: (days?: number, limit?: number, providerFilter?: string[]) => Promise<any[]>;
+  getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
+  getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
-  searchSessions: (query: string, limit?: number) => Promise<any[]>;
-  getProjects: (providerFilter?: string[]) => Promise<any[]>;
+  searchSessions: (query: string, limit?: number, machineKey?: string) => Promise<any[]>;
+  getProjects: (providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   deleteSession: (sessionId: string) => Promise<{ deleted: boolean; filePath: string; projectDisplay: string } | null>;
   getAnnotation: (sessionId: string) => Promise<any>;
   updateAnnotation: (sessionId: string, data: any) => Promise<any>;

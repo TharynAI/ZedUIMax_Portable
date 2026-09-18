@@ -9,6 +9,7 @@ import type {
 } from '../../shared/proeng';
 import type {
   PortableDiagnosticsReport,
+  MachineProfile,
   PortableProviderConfig,
   PortableProviderKey,
   PortableSetupStatus,
@@ -25,10 +26,11 @@ import type {
 // Type declaration for Electron API exposed via preload
 export interface ElectronAPI {
   // Session operations
-  getSessions: (days?: number, limit?: number, providerFilter?: string[]) => Promise<any[]>;
+  getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
+  getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
-  searchSessions: (query: string, limit?: number) => Promise<any[]>;
-  getProjects: (providerFilter?: string[]) => Promise<any[]>;
+  searchSessions: (query: string, limit?: number, machineKey?: string) => Promise<any[]>;
+  getProjects: (providerFilter?: string[], machineKey?: string) => Promise<any[]>;
 
   // Annotation operations
   getAnnotation: (sessionId: string) => Promise<any>;
