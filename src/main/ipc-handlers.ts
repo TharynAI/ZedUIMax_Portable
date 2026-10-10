@@ -17,6 +17,7 @@ import {
   getShortId,
   deleteSession,
   searchMessages,
+  matchesSessionFilter,
 } from './session-store';
 import {
   getAnnotation,
@@ -197,20 +198,22 @@ export function setupIpcHandlers(): void {
     return enhanceSession(details);
   });
 
-  ipcMain.handle('sessions:search', async (_, query: string, limit?: number, machineKey?: string) => {
-    const results = search(query, limit || 20);
+  ipcMain.handle('sessions:search', async (_, query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => {
+    const results = search(query, DEFAULT_LIMIT);
 
     // Enhance results with full session info
-    return results.map(r => {
+    const matches: ReturnType<typeof enhanceSession>[] = [];
+    for (const r of results) {
       const details = getSessionDetails(r.sessionId);
-      if (details && matchesMachineProfile({
+      if (details && matchesSessionFilter(details, providerFilter) && matchesMachineProfile({
         machineName: details.machineName || '',
         machineId: details.machineId ?? null,
       }, machineKey)) {
-        return enhanceSession(details);
+        matches.push(enhanceSession(details));
+        if (matches.length >= (limit || 20)) break;
       }
-      return null;
-    }).filter(Boolean);
+    }
+    return matches;
   });
 
   ipcMain.handle('sessions:projects', async (_event, providerFilter?: string[], machineKey?: string) => {

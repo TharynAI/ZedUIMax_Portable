@@ -8,7 +8,7 @@
  */
 
 import fs from 'fs';
-import { canonPath, productForFile, productsForProvider, toNativeReadPath } from './agent-products';
+import { canonPath, productById, productForFile, productsForProvider, toNativeReadPath } from './agent-products';
 import path from 'path';
 import readline from 'readline';
 import {
@@ -21,6 +21,7 @@ import {
   DEFAULT_PROVIDERS,
   buildProviderSessionId as buildSessionId,
   parseProviderSessionId,
+  isProviderId,
 } from './provider-utils';
 import { buildClaudeLaunch, buildCodexLaunch, buildCursorLaunch } from './launch-config';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
@@ -80,6 +81,7 @@ export interface SessionInfo {
             existing Codex session reports `codex` and is untouched.
   */
   product?: string;
+  productLabel?: string;
   // <END Tharyn | CursX
 }
 
@@ -102,6 +104,11 @@ function withMachineProfile<T extends object>(value: T, profile: MachineProfile)
     machineName: profile.machineName,
     machineId: profile.machineId,
   };
+}
+
+function withProductLabel<T extends { product?: string }>(value: T): T & { productLabel?: string } {
+  const label = productById(value.product)?.label;
+  return label ? { ...value, productLabel: label } : value;
 }
 
 function profileFromSession(session: SessionInfo): MachineProfile | null {
@@ -139,21 +146,83 @@ function getProviderRoot(config: PortableProviderConfig, providerId: ProviderId)
 }
 
 function providerRootExists(config: PortableProviderConfig, providerId: ProviderId): boolean {
+  if (providerId === 'claude') return claudeFamilyRoots(config).some(root => fs.existsSync(root.dir));
   const root = getProviderRoot(config, providerId);
   return Boolean(root && fs.existsSync(root));
 }
 
-function getConfiguredProviders(providerFilter?: ProviderId[]): {
+function getConfiguredProviders(providerFilter?: string[]): {
   config: PortableProviderConfig;
   providers: ProviderId[];
 } {
   const config = loadPortableConfigFromSettingsFile();
-  const requested = providerFilter && providerFilter.length ? providerFilter : DEFAULT_PROVIDERS;
+  const requested = providerFilter?.length
+    ? providerFilter.map(id => isProviderId(id) ? id : productsForProvider('claude').some(p => p.id === id)
+      ? 'claude' : productsForProvider('codex').some(p => p.id === id) ? 'codex' : null)
+      .filter((id): id is ProviderId => id !== null)
+    : DEFAULT_PROVIDERS;
   return {
     config,
-    providers: requested.filter((providerId) => Boolean(getProviderRoot(config, providerId))),
+    providers: [...new Set(requested)].filter(providerId => providerId === 'claude'
+      ? claudeFamilyRoots(config).length > 0 : Boolean(getProviderRoot(config, providerId))),
   };
 }
+
+/* START> Tharyn | ZedMax
+    2026-10-10
+    What: Discover isolated Claude products without changing their annotation key space.
+    Why: Clausor shares the Claude transcript format, but its home and launch route are distinct.
+    Expected: One source resolver for reads and mutations; conflicting native IDs refuse operations.
+*/
+export function matchesSessionFilter(
+  session: { providerId: ProviderId; product?: string }, filter?: string[],
+): boolean {
+  return !filter?.length || filter.some(id => isProviderId(id)
+    ? session.providerId === id : session.product === id);
+}
+
+function claudeFamilyRoots(config: PortableProviderConfig): Array<{ dir: string; product: string }> {
+  const roots: Array<{ dir: string; product: string }> = [];
+  const seen = new Set<string>();
+  const add = (dir: string, product: string) => {
+    const native = toNativeReadPath(dir);
+    const key = canonPath(native);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    roots.push({ dir: native, product });
+  };
+  const configured = getProviderRoot(config, 'claude');
+  if (configured) add(configured, productForFile(configured, 'claude')?.id || 'claude-code');
+  for (const product of productsForProvider('claude')) {
+    if (product.sessionsDir && !product.fallback) add(product.sessionsDir, product.id);
+  }
+  return roots;
+}
+
+export function findClaudeSessionSource(rawId: string): {
+  dir: string; product: string; filePath: string; projectPath: string;
+} | null {
+  if (!rawId || /[\\/]/.test(rawId) || rawId === '.' || rawId === '..') {
+    throw new Error('Invalid Claude session ID.');
+  }
+  const matches = new Map<string, { dir: string; product: string; filePath: string; projectPath: string }>();
+  for (const root of claudeFamilyRoots(loadPortableConfigFromSettingsFile())) {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(root.dir, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const filePath = path.join(root.dir, entry.name, `${rawId}.jsonl`);
+      if (!fs.existsSync(filePath)) continue;
+      const product = productForFile(filePath, 'claude')?.id || root.product;
+      matches.set(canonPath(filePath), { ...root, product, filePath, projectPath: entry.name });
+    }
+  }
+  if (matches.size > 1) {
+    throw new Error(`Ambiguous Claude session ${rawId}: found in multiple locations; refusing to choose a home.`);
+  }
+  return matches.values().next().value || null;
+}
+// <END Tharyn | ZedMax
 
 /* START> Tharyn | ZedUI Windows
     2025-12-28
@@ -387,7 +456,7 @@ export function projectsFromSessions(sessions: SessionInfo[]): ProjectInfo[] {
   });
 }
 
-export function getAllProjects(providerFilter?: ProviderId[], selectedMachineKey?: string): ProjectInfo[] {
+export function getAllProjects(providerFilter?: string[], selectedMachineKey?: string): ProjectInfo[] {
   const sessions = getSessions(providerFilter, DEFAULT_DAYS, DEFAULT_LIMIT * 5, selectedMachineKey);
   return projectsFromSessions(sessions);
 }
@@ -502,7 +571,7 @@ function parseSessionFile(filePath: string, projectPath: string, projectDisplay:
 /**
  * Get sessions, optionally filtered by project and age.
  */
-function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
+function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS, product?: string): SessionInfo[] {
   const sessions: SessionInfo[] = [];
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
@@ -533,6 +602,7 @@ function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS): S
 
         const session = parseSessionFile(filePath, dirname, projectDisplay);
         if (session && session.timestamp >= cutoff && (session.messageCount > 0 || session.autoSummary)) {
+          session.product = productForFile(filePath, 'claude')?.id || product || 'claude-code';
           sessions.push(session);
         }
       } catch {
@@ -548,7 +618,7 @@ function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS): S
  * Aggregate sessions across providers with optional filter.
  */
 export function getSessions(
-  providerFilter?: ProviderId[],
+  providerFilter?: string[],
   days: number = DEFAULT_DAYS,
   limit: number = DEFAULT_LIMIT,
   selectedMachineKey?: string,
@@ -565,7 +635,9 @@ export function getSessions(
   let sessions: SessionInfo[] = [];
 
   if (providers.includes('claude')) {
-    sessions = sessions.concat(getClaudeSessions(getProviderRoot(config, 'claude'), days));
+    for (const root of claudeFamilyRoots(config)) {
+      sessions = sessions.concat(getClaudeSessions(root.dir, days, root.product));
+    }
   }
   if (providers.includes('codex')) {
     /* START> Tharyn | CursX
@@ -613,8 +685,8 @@ export function getSessions(
   }
   // <END Tharyn | CursorCLI
 
-  sessions = dedupeSessionsById(sessions)
-    .map((session) => withMachineProfile(session, config.machine));
+  sessions = dedupeSessionsById(sessions.filter(session => matchesSessionFilter(session, providerFilter)))
+    .map((session) => withProductLabel(withMachineProfile(session, config.machine)));
   const effectiveMachineKey = selectedMachineKey || machineProfileKey(config.machine);
   sessions = filterSessionsByMachine(sessions, effectiveMachineKey);
   sessions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -696,35 +768,41 @@ export function getSessionIdentities(providerId: ProviderId, product?: string): 
   const identities: SessionIdentity[] = [];
 
   if (providerId === 'claude') {
-    const root = getProviderRoot(config, 'claude');
-    if (!root || !fs.existsSync(root)) return identities;
-    let projectDirs: fs.Dirent[] = [];
-    try {
-      projectDirs = fs.readdirSync(root, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
-    } catch {
-      return identities;
-    }
-    for (const projectDir of projectDirs) {
-      const directory = path.join(root, projectDir.name);
-      let files: string[] = [];
+    for (const source of claudeFamilyRoots(config)) {
+      if (product && source.product !== product) continue;
+      const root = source.dir;
+      if (!root || !fs.existsSync(root)) continue;
+      let projectDirs: fs.Dirent[] = [];
       try {
-        files = fs.readdirSync(directory)
-          .filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
+        projectDirs = fs.readdirSync(root, { withFileTypes: true })
+          .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
       } catch {
         continue;
       }
-      for (const file of files) {
-        const filePath = path.join(directory, file);
+      for (const projectDir of projectDirs) {
+        const directory = path.join(root, projectDir.name);
+        let files: string[] = [];
         try {
-          identities.push({
-            sessionId: buildSessionId('claude', path.basename(file, '.jsonl')),
-            providerId: 'claude',
-            filePath,
-            timestamp: fs.statSync(filePath).mtime,
-          });
+          files = fs.readdirSync(directory)
+            .filter(file => file.endsWith('.jsonl') && !file.startsWith('agent-'));
         } catch {
           continue;
+        }
+        for (const file of files) {
+          const filePath = path.join(directory, file);
+          try {
+            const fileProduct = productForFile(filePath, 'claude')?.id || source.product;
+            if (product && fileProduct !== product) continue;
+            identities.push({
+              sessionId: buildSessionId('claude', path.basename(file, '.jsonl')),
+              providerId: 'claude',
+              product: fileProduct,
+              filePath,
+              timestamp: fs.statSync(filePath).mtime,
+            });
+          } catch {
+            continue;
+          }
         }
       }
     }
@@ -976,15 +1054,18 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
   const { providerId, rawId } = parseProviderSessionId(sessionId);
   const config = loadPortableConfigFromSettingsFile();
   const providerRoot = getProviderRoot(config, providerId);
-  if (!providerRoot) {
+  if (!providerRoot && providerId !== 'claude') {
     return null;
   }
 
   let details: SessionDetails | null;
   switch (providerId) {
-    case 'claude':
-      details = getClaudeSessionDetails(rawId, providerRoot);
+    case 'claude': {
+      const source = findClaudeSessionSource(rawId);
+      details = source ? parseSessionDetails(source.filePath, source.projectPath) : null;
+      if (details && source) details.product = source.product;
       break;
+    }
     case 'codex':
       /* START> Tharyn | CursX
           2026-09-07
@@ -1022,7 +1103,7 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
       Expected: If cwd_override exists for this sessionId, details.cwd reflects it; else unchanged
   */
   if (details) {
-    details = withMachineProfile(details, config.machine);
+    details = withProductLabel(withMachineProfile(details, config.machine));
     try {
       const override = getCwdOverride(sessionId);
       if (override) {
@@ -1564,18 +1645,7 @@ export function findSessionProject(sessionId: string): string | null {
 
   switch (providerId) {
     case 'claude': {
-      if (!providerRoot || !fs.existsSync(providerRoot)) {
-        return null;
-      }
-      const projectDirs = fs.readdirSync(providerRoot, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith('.'));
-      for (const projectDir of projectDirs) {
-        const sessionFile = path.join(providerRoot, projectDir.name, `${rawId}.jsonl`);
-        if (fs.existsSync(sessionFile)) {
-          return projectDir.name;
-        }
-      }
-      return null;
+      return findClaudeSessionSource(rawId)?.projectPath || null;
     }
     case 'codex': {
       const details = getCodexSessionDetails(rawId, providerRoot);
@@ -1620,7 +1690,7 @@ export function getResumeInfo(sessionId: string): ResumeInfo | null {
   try {
     switch (providerId) {
       case 'claude': {
-        const launch = buildClaudeLaunch('resume', cwd, rawId);
+        const launch = buildClaudeLaunch('resume', cwd, rawId, undefined, details.product);
         const wslShellCommand = launch.wslShellCommand || launch.displayCommand;
         return {
           sessionId,
@@ -1798,6 +1868,7 @@ export function deleteSession(sessionId: string): { deleted: boolean; filePath: 
 
 export interface MessageSearchResult {
   sessionId: string;
+  product?: string;
   projectPath: string;
   projectDisplay: string;
   messageIndex: number;
@@ -1901,7 +1972,9 @@ function searchClaudeMessages(
   query: string,
   limit: number = 50,
   days: number = 30,
-  projectsRoot: string
+  projectsRoot: string,
+  product?: string,
+  providerFilter?: string[],
 ): MessageSearchResult[] {
   if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
@@ -1931,6 +2004,8 @@ function searchClaudeMessages(
       const filePath = path.join(projectPath, file);
       const rawSessionId = path.basename(file, '.jsonl');
       const sessionId = buildSessionId('claude', rawSessionId);
+      const fileProduct = productForFile(filePath, 'claude')?.id || product || 'claude-code';
+      if (!matchesSessionFilter({ providerId: 'claude', product: fileProduct }, providerFilter)) continue;
 
       try {
         const stat = fs.statSync(filePath);
@@ -1960,6 +2035,7 @@ function searchClaudeMessages(
                   }
                   results.push({
                     sessionId,
+                    product: fileProduct,
                     projectPath: projectDir.name,
                     projectDisplay,
                     messageIndex,
@@ -2206,7 +2282,7 @@ export function searchMessages(
   query: string,
   limit: number = 50,
   days: number = 30,
-  providerFilter?: ProviderId[]
+  providerFilter?: string[]
 ): MessageSearchResult[] {
   const started = Date.now();
   if (!query || query.length < 2) {
@@ -2224,10 +2300,16 @@ export function searchMessages(
   let results: MessageSearchResult[] = [];
 
   if (providers.includes('claude')) {
-    results = results.concat(searchClaudeMessages(query, limit, days, getProviderRoot(config, 'claude')));
+    for (const root of claudeFamilyRoots(config)) {
+      results = results.concat(searchClaudeMessages(query, limit, days, root.dir, root.product, providerFilter));
+    }
   }
   if (providers.includes('codex')) {
-    results = results.concat(searchCodexMessages(query, limit, days, getProviderRoot(config, 'codex')));
+    for (const root of codexFamilyRoots(config)) {
+      if (!matchesSessionFilter({ providerId: 'codex', product: root.product }, providerFilter)) continue;
+      results = results.concat(searchCodexMessages(query, limit, days, root.dir)
+        .map(result => ({ ...result, product: root.product })));
+    }
   }
   if (providers.includes('cursor')) {
     results = results.concat(searchCursorMessages(query, limit, days, getProviderRoot(config, 'cursor')));

@@ -56,6 +56,13 @@ export function getProviderDisplay(id: ProviderId): ProviderDisplay {
     Expected: CursX rows read "CursX" in their own colour; Codex, Claude and Cursor unchanged.
 */
 const productMap: Record<string, ProviderDisplay> = {
+  clausor: {
+    id: 'claude',
+    label: 'Clausor',
+    assistantName: 'Clausor',
+    badgeBgClass: 'bg-emerald-900/20',
+    badgeBorderClass: 'border-emerald-700/40',
+  },
   cursx: {
     id: 'codex',            // still Codex-family for anything keyed off the id
     label: 'CursX',
@@ -68,8 +75,13 @@ const productMap: Record<string, ProviderDisplay> = {
 export function getSessionDisplay(
   providerId: ProviderId,
   product?: string | null,
+  productLabel?: string | null,
 ): ProviderDisplay {
-  if (product && productMap[product]) return productMap[product]!;
+  if (product && productMap[product]) {
+    const display = productMap[product]!;
+    return productLabel ? { ...display, label: productLabel, assistantName: productLabel } : display;
+  }
+  if (productLabel) return { ...getProviderDisplay(providerId), label: productLabel, assistantName: productLabel };
   return getProviderDisplay(providerId);
 }
 
@@ -77,10 +89,13 @@ export const PRODUCT_FILTER_OPTIONS: ReadonlyArray<{ id: string; label: string }
   Object.entries(productMap).map(([id, d]) => ({ id, label: d.label }));
 // <END Tharyn | CursX
 
-export const PROVIDER_FILTER_OPTIONS: ReadonlyArray<{ id: ProviderId | 'all'; label: string }> = [
+export type ProviderFilter = ProviderId | 'all' | 'clausor' | 'cursx';
+export const PROVIDER_FILTER_OPTIONS: ReadonlyArray<{ id: ProviderFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'claude', label: 'Claude' },
+  { id: 'clausor', label: 'Clausor' },
   { id: 'codex', label: 'Codex' },
+  { id: 'cursx', label: 'CursX' },
   { id: 'cursor', label: 'Cursor' },
 ];
 

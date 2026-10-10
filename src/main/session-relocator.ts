@@ -21,6 +21,7 @@ import { setCwdOverride } from './metadata-db';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
 import { parseProviderSessionId, toWslPath, wslToWindowsPath } from './provider-utils';
 import type { ProviderId } from '../shared/constants';
+import { findClaudeSessionSource } from './session-store';
 
 export interface RelocationResult {
   success: boolean;
@@ -72,7 +73,8 @@ function getWritableProviderRoot(providerId: ProviderId): string | null {
  * Find the session file across all project folders.
  * Returns the full path to the JSONL file, or null if not found.
  */
-export function findSessionFile(sessionId: string, projectsRoot = getConfiguredProviderRoot('claude')): string | null {
+export function findSessionFile(sessionId: string, projectsRoot?: string): string | null {
+  if (projectsRoot === undefined) return findClaudeSessionSource(parseProviderSessionId(sessionId).rawId)?.filePath || null;
   if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return null;
   }
@@ -117,7 +119,9 @@ export function directoryExists(dirPath: string): boolean {
 export function relocateSession(sessionId: string, newCwd: string): RelocationResult {
   const started = Date.now();
   const { providerId, rawId } = parseProviderSessionId(sessionId);
-  const providerRoot = getWritableProviderRoot(providerId);
+  const providerRoot = providerId === 'claude'
+    ? findClaudeSessionSource(rawId)?.dir || null
+    : getWritableProviderRoot(providerId);
 
   // Normalize newCwd to WSL form (relocateClaudeSession expects WSL paths in JSONL; cwd_override stores normalized form)
   const normalizedNewCwd = toWslPath(newCwd).replace(/\/+$/, '');

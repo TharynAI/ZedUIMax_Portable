@@ -19,6 +19,7 @@ interface LauncherOption {
 
 const LAUNCHERS: LauncherOption[] = [
   { id: 'claude2', label: 'Claude2', indexed: true },
+  { id: 'clausor', label: 'Clausor', indexed: true },
   { id: 'codex2', label: 'Codex2', indexed: true },
   { id: 'cursx', label: 'CursX', indexed: true },
   { id: 'gemini3', label: 'Gemini3', indexed: false },

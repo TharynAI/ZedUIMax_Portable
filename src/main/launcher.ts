@@ -104,7 +104,7 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
       return;
     }
     case 'claude': {
-      const launch = buildClaudeLaunch('resume', cwd, rawId);
+      const launch = buildClaudeLaunch('resume', cwd, rawId, undefined, details.product);
       try {
         await runLaunchCommand(launch.command, launch.args, 'Launching Claude session:');
       } catch (error) {
@@ -201,7 +201,7 @@ export function getResumeCommand(sessionId: string): string | null {
     }
     case 'claude': {
       try {
-        const launch = buildClaudeLaunch('resume', cwd, rawId);
+        const launch = buildClaudeLaunch('resume', cwd, rawId, undefined, details.product);
         return launch.wslShellCommand || launch.displayCommand;
       } catch {
         return null;
@@ -567,7 +567,7 @@ export async function branchSession(
   let branchLaunch: ReturnType<typeof buildCodexLaunch>;
   try {
     branchLaunch = providerId === 'claude'
-      ? buildClaudeLaunch('resume', cwd, newRawSessionId)
+      ? buildClaudeLaunch('resume', cwd, newRawSessionId, undefined, details.product)
       : buildCodexLaunch('resume', cwd, newRawSessionId, opts?.codexVariant || 'codex',
           getCodexProductForRawId(rawParentId));
   } catch (error) {

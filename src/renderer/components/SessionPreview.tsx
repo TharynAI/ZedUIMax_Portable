@@ -121,7 +121,7 @@ function PreviewHeader({ session }: { session: any }) {
         */}
         {(() => {
           // Badge by product so a CursX session is not shown as plain Codex.
-          const disp = getSessionDisplay(session.providerId, session.product);
+          const disp = getSessionDisplay(session.providerId, session.product, session.productLabel);
           return (
             <span
               className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border ${disp.badgeBgClass} ${disp.badgeBorderClass}`}

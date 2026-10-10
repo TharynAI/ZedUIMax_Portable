@@ -26,7 +26,7 @@ import { useMessageContextMenuStore } from '../stores/message-context-menu-store
     Why: Hardcoded 'Claude' label was incorrect for Codex/Cursor sessions
     Expected: Assistant header shows 'Claude'/'Codex'/'Cursor' based on providerId prop
 */
-import { getProviderDisplay, type ProviderId } from '../providers/display';
+import { getSessionDisplay, type ProviderId } from '../providers/display';
 // <END Tharyn | CursorCLI
 
 interface MessageBubbleProps {
@@ -41,15 +41,17 @@ interface MessageBubbleProps {
       Expected: Codex/Cursor sessions show 'Codex'/'Cursor'; missing prop falls back to 'Claude'
   */
   providerId?: ProviderId;
+  product?: string;
+  productLabel?: string;
   // <END Tharyn | CursorCLI
 }
 
 const LINE_THRESHOLD = 10;  // Collapse if more than this many lines
 const PREVIEW_LINES = 5;    // Show this many lines when collapsed
 
-const MessageBubble = memo(function MessageBubble({ type, content, timestamp, highlightQuery, providerId = 'claude' }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ type, content, timestamp, highlightQuery, providerId = 'claude', product, productLabel }: MessageBubbleProps) {
   const isUser = type === 'user';
-  const assistantLabel = getProviderDisplay(providerId).assistantName;
+  const assistantLabel = getSessionDisplay(providerId, product, productLabel).assistantName;
   const showContextMenu = useMessageContextMenuStore((s) => s.show);
 
   // Check if this message matches the highlight query

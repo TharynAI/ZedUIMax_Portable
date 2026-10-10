@@ -29,7 +29,7 @@ export interface ElectronAPI {
   getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
-  searchSessions: (query: string, limit?: number, machineKey?: string) => Promise<any[]>;
+  searchSessions: (query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => Promise<any[]>;
   getProjects: (providerFilter?: string[], machineKey?: string) => Promise<any[]>;
 
   // Annotation operations

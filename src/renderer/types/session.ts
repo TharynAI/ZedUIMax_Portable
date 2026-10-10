@@ -13,6 +13,7 @@ export interface Session {
       Expected: A CursX row is badged CursX; every existing session is unaffected.
   */
   product?: string;
+  productLabel?: string;
   // <END Tharyn | CursX
   model?: string;              // Model name (e.g., claude-3-opus, gpt-4)
   projectPath: string;         // e.g., "-mnt-e-ZedBang"

@@ -286,6 +286,8 @@ function ConversationView() {
           searchQuery={searchMode === 'filter' ? searchQuery : undefined}
           highlightQuery={searchMode === 'navigate' ? searchQuery : undefined}
           providerId={selectedSession?.providerId}
+          product={selectedSession?.product}
+          productLabel={selectedSession?.productLabel}
         />
         {/* <END Tharyn | CursorCLI */}
       </div>

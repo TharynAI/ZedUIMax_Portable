@@ -13,15 +13,33 @@ const assert = require('node:assert/strict');
 const childProcess = require('node:child_process');
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'zedui-cursx-rocket-'));
 const root = path.resolve(__dirname, '..');
+const testedProduct = process.argv.includes('--product=clausor') ? 'clausor' : 'cursx';
+const productLabel = testedProduct === 'clausor' ? 'Clausor' : 'CursX';
+const keyProvider = testedProduct === 'clausor' ? 'claude' : 'codex';
 process.env.ZEDUI_APP_ROOT = root;
 process.env.ZEDUI_DATA_ROOT = fixture;
 process.env.ZEDUI_ALLOW_EXTERNAL_DATA_ROOT = '1';
+process.env.ZEDBANG_PATHS = path.join(fixture, 'shared-paths.json');
+fs.mkdirSync(path.join(fixture, 'tower', 'config'), { recursive: true });
+const fixtureScript = path.join(fixture, 'launcher with spaces.ps1');
+fs.writeFileSync(fixtureScript, '# fixture launcher; subprocesses are stubbed\n');
+fs.writeFileSync(process.env.ZEDBANG_PATHS, JSON.stringify({
+  zedTrafficControlData: path.join(fixture, 'tower', 'data'), zeduiDb: path.join(fixture, 'zedui.db'),
+}));
+fs.writeFileSync(path.join(fixture, 'tower', 'config', 'agent-products.json'), JSON.stringify({ version: 1, products: [{
+  id: testedProduct, label: productLabel, keyProvider, harness: testedProduct === 'clausor' ? 'claude-code' : 'codex',
+  inferenceRoute: 'cursor', home: path.join(fixture, 'home'), sessionsDir: path.join(fixture, 'home', testedProduct === 'clausor' ? 'projects' : 'sessions'),
+  launch: { exe: 'powershell.exe', args: ['-File', fixtureScript, 'new', '--cwd', '{cwd}'] },
+  resume: { exe: 'powershell.exe', args: testedProduct === 'clausor'
+    ? ['-File', fixtureScript, 'resume', '--cwd', '{cwd}', '--session', '{sessionId}']
+    : ['-File', fixtureScript, 'resume', '{cwd}', '{sessionId}'] },
+}] }));
 app.setPath('userData', path.join(fixture, 'userData'));
 console.log(JSON.stringify({ fixture, pid: process.pid, hidden: true }));
 const calls = [];
 let failLaunch = false;
 childProcess.execFile = (exe, args, options, callback) => {
-  assert.equal(exe, 'wt.exe', 'CursX must have an interactive Windows Terminal');
+  assert.equal(exe, 'wt.exe', `${productLabel} must have an interactive Windows Terminal`);
   calls.push({ exe, args, options });
   callback(failLaunch ? new Error('Fixture: CursX unavailable') : null, '', '');
 };
@@ -46,10 +64,11 @@ async function waitFor(code) {
   throw new Error(`UI did not reach expected state: ${code}`);
 }
 async function choose(mode) {
+  const buttons = `document.querySelector('button[title="Launch Assistant"]').parentElement.querySelectorAll('button')`;
   await evaluate(`document.querySelector('button[title="Launch Assistant"]').click()`);
-  await waitFor(`Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'CursX')`);
-  await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'CursX').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
-  await waitFor(`Array.from(document.querySelectorAll('button')).some(b => b.textContent === '${mode}')`);
+  await waitFor(`Array.from(${buttons}).some(b => b.textContent === '${productLabel}')`);
+  await evaluate(`Array.from(${buttons}).find(b => b.textContent === '${productLabel}').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+  await waitFor(`Array.from(${buttons}).some(b => b.textContent === '${mode}')`);
   const bounds = await evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('button')).find(b => b.textContent === '${mode}');
     const r = button.getBoundingClientRect();
@@ -59,7 +78,25 @@ async function choose(mode) {
     `Rocket action must stay inside the window: ${JSON.stringify(bounds)}`);
   console.log(`Rocket ${mode} bounds: ${JSON.stringify(bounds)}`);
   await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === '${mode}').click()`);
-  await waitFor(`!Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'CursX')`);
+  await waitFor(`!Array.from(${buttons}).some(b => b.textContent === '${productLabel}')`);
+}
+async function classify() {
+  await waitFor(`!!document.querySelector('form[role="dialog"]')`);
+  const callsBefore = calls.length;
+  assert.equal(await evaluate(`document.querySelector('form[role="dialog"] button[type="submit"]').disabled`), true);
+  await evaluate(`(() => {
+    const inputs = document.querySelectorAll('form[role="dialog"] input');
+    ['Rocket fixture summary', 'Fixture category'].forEach((value, i) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inputs[i], value);
+      inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  })()`);
+  await waitFor(`!document.querySelector('form[role="dialog"] button[type="submit"]').disabled`);
+  assert.equal(calls.length, callsBefore, 'Classification inputs must not launch anything');
+  await evaluate(`document.querySelector('form[role="dialog"] button[type="submit"]').click()`);
+  await waitFor(failLaunch
+    ? `document.querySelector('.launch-classification-error')?.textContent.includes('Fixture: CursX unavailable')`
+    : `!document.querySelector('form[role="dialog"]')`);
 }
 app.whenReady().then(async () => {
   const runtime = require('../dist/main/main/runtime-paths.js');
@@ -72,14 +109,14 @@ app.whenReady().then(async () => {
   const sessions = require('../dist/main/main/session-store.js');
   const getDetails = sessions.getSessionDetails;
   const resumeId = '11111111-2222-4333-8444-555555555555';
-  sessions.getSessionDetails = id => id === `codex:${resumeId}`
-    ? { id, cwd: config.defaultWorkspaceWin, projectDisplay: config.defaultWorkspaceWin }
+  sessions.getSessionDetails = id => id === `${keyProvider}:${resumeId}`
+    ? { sessionId: id, providerId: keyProvider, product: testedProduct, cwd: config.defaultWorkspaceWin, projectDisplay: config.defaultWorkspaceWin }
     : getDetails(id);
   const getProduct = sessions.getCodexProductForRawId;
   sessions.getCodexProductForRawId = id => id === resumeId ? 'cursx' : getProduct(id);
   require('../dist/main/main/ipc-handlers.js').setupIpcHandlers();
   const products = require('../dist/main/main/agent-products.js');
-  const product = products.productById('cursx');
+  const product = products.productById(testedProduct);
   assert(product?.launch && product?.resume, 'Installed registry must contain both CursX commands');
   for (const cmd of [product.launch, product.resume]) {
     assert(fs.existsSync(cmd.args[cmd.args.indexOf('-File') + 1]), 'Registered launcher script exists');
@@ -100,25 +137,41 @@ app.whenReady().then(async () => {
   })()`);
   for (const [mode, command] of [['New', product.launch], ['Resume', product.resume]]) {
     await choose(mode);
+    if (mode === 'new' || mode === 'New') await classify();
     const call = calls.at(-1);
+    const nativeId = mode === 'New' && testedProduct === 'clausor' ? call.args.at(-1) : undefined;
     const filled = products.fillCommand(command, { cwd: config.defaultWorkspaceWin });
+    const expectedArgs = filled.args.filter(arg => arg !== '');
+    if (mode === 'Resume' && testedProduct === 'clausor') expectedArgs.splice(expectedArgs.indexOf('--session'), 1);
+    if (nativeId) {
+      assert.match(nativeId, /^[0-9a-f-]{36}$/);
+      expectedArgs.push('--', '--session-id', nativeId);
+      const annotation = require('../dist/main/main/metadata-db.js').getAnnotation(`claude:${nativeId}`);
+      assert.equal(annotation.userSummary, 'Rocket fixture summary');
+      assert.equal(annotation.type, 'Fixture category');
+    }
     assert.deepEqual({ exe: call.exe, args: call.args }, {
-      exe: 'wt.exe', args: [filled.exe, ...filled.args.filter(arg => arg !== '')],
+      exe: 'wt.exe', args: [filled.exe, ...expectedArgs],
     });
     assert.equal(call.options.windowsHide, false);
-    console.log(`PASS: rocket CursX ${mode} -> compiled preload -> main IPC -> registered script`);
+    console.log(`PASS: rocket ${productLabel} ${mode} -> compiled preload -> main IPC -> registered script`);
   }
-  await evaluate(`window.electronAPI.continueSession('codex:${resumeId}')`);
+  await evaluate(`window.electronAPI.continueSession('${keyProvider}:${resumeId}')`);
   const resumed = calls.at(-1);
   const expectedResume = products.fillCommand(product.resume, { cwd: config.defaultWorkspaceWin, sessionId: resumeId });
   assert.deepEqual({ exe: resumed.exe, args: resumed.args }, {
     exe: 'wt.exe', args: [expectedResume.exe, ...expectedResume.args],
   });
-  console.log('PASS: saved CursX session Resume IPC -> Windows Terminal with exact native UUID');
+  console.log(`PASS: saved ${productLabel} session Resume IPC -> Windows Terminal with exact native UUID`);
   failLaunch = true;
   await choose('New');
-  await waitFor(`document.querySelector('[role="alert"]')?.textContent.includes('Fixture: CursX unavailable')`);
-  await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Dismiss').click()`);
+  await classify();
+  assert.equal(await evaluate(`!!document.querySelector('form[role="dialog"]')`), true, 'Failed launch keeps the classification draft');
+  await evaluate(`Array.from(document.querySelector('form[role="dialog"]').querySelectorAll('button')).find(b => b.textContent === 'Cancel').click()`);
+  await waitFor(`!!document.querySelector('[role="alert"]')`);
+  await evaluate(`document.querySelector('button[aria-label="Dismiss launch notice"]').click()`);
+  await waitFor(`document.querySelector('[role="alert"] strong')?.textContent === '${productLabel}'`);
+  await evaluate(`document.querySelector('button[aria-label="Dismiss launch notice"]').click()`);
   await waitFor(`!document.querySelector('[role="alert"]')`);
   console.log('PASS: persistent visible error and dismissal; no real subprocess or live database used');
   clearTimeout(timeout);

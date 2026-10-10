@@ -44,6 +44,13 @@ export interface ClassificationCandidate {
 }
 
 const TARGETS: Record<AssistantLauncherId, ClassificationTarget> = {
+  clausor: {
+    launcherId: 'clausor',
+    launcherLabel: 'Clausor',
+    providerId: 'claude',
+    product: 'clausor',
+    exactIdentity: 'claude',
+  },
   claude2: {
     launcherId: 'claude2',
     launcherLabel: 'Claude2',

@@ -34,8 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('machines:list'),
   getSessionDetails: (sessionId: string) =>
     ipcRenderer.invoke('sessions:details', sessionId),
-  searchSessions: (query: string, limit?: number, machineKey?: string) =>
-    ipcRenderer.invoke('sessions:search', query, limit, machineKey),
+  searchSessions: (query: string, limit?: number, machineKey?: string, providerFilter?: string[]) =>
+    ipcRenderer.invoke('sessions:search', query, limit, machineKey, providerFilter),
   getProjects: (providerFilter?: string[], machineKey?: string) =>
     ipcRenderer.invoke('sessions:projects', providerFilter, machineKey),
   deleteSession: (sessionId: string) =>
@@ -221,7 +221,7 @@ export type ElectronAPI = {
   getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
-  searchSessions: (query: string, limit?: number, machineKey?: string) => Promise<any[]>;
+  searchSessions: (query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => Promise<any[]>;
   getProjects: (providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   deleteSession: (sessionId: string) => Promise<{ deleted: boolean; filePath: string; projectDisplay: string } | null>;
   getAnnotation: (sessionId: string) => Promise<any>;

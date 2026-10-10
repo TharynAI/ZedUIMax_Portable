@@ -6,7 +6,7 @@ import { toWslPath, wslToWindowsPath } from './provider-utils';
 import type { PortableProviderConfig } from '../shared/portable-config';
 
 export type CodexVariant = 'codex' | 'codexSub';
-export type AssistantLauncherId = 'claude2' | 'codex2' | 'cursx' | 'cursor' | 'gemini3';
+export type AssistantLauncherId = 'claude2' | 'clausor' | 'codex2' | 'cursx' | 'cursor' | 'gemini3';
 export type AssistantLaunchMode = 'new' | 'resume';
 
 export interface LaunchCommand {
@@ -107,7 +107,33 @@ export function buildClaudeLaunch(
   cwd: string,
   resumeId?: string,
   newSessionId?: string,
+  product?: string,
 ): LaunchCommand {
+  /* START> Tharyn | ZedMax
+      2026-10-10
+      What: Route isolated Claude products through their registered terminal launchers.
+      Why: Clausor must resume against its own home and keep exact native launch classification.
+      Expected: Missing/mismatched routes fail before launch; ordinary Claude uses its configured route.
+  */
+  if (product && product !== 'claude-code') {
+    const resolved = productById(product);
+    if (!resolved || resolved.keyProvider !== 'claude' || resolved.fallback) {
+      throw new Error(`${product} is not configured as a Claude product; refusing to launch it as Claude.`);
+    }
+    const template = mode === 'resume' ? resolved.resume : resolved.launch;
+    if (!template || !template.exe || !Array.isArray(template.args)) {
+      throw new Error(`${resolved.label} has no ${mode} command configured; refusing to launch it as Claude.`);
+    }
+    // An omitted native ID opens the product's own picker, without an empty --session option.
+    const args = template.args.filter((arg, index, all) => !(mode === 'resume' && !resumeId
+      && ((arg === '--session' && all[index + 1] === '{sessionId}')
+        || (arg === '{sessionId}' && all[index - 1] === '--session'))));
+    const filled = fillCommand({ ...template, args }, { sessionId: resumeId, cwd: wslToWindowsPath(cwd) });
+    if (mode === 'new' && newSessionId) filled.args.push('--', '--session-id', newSessionId);
+    const terminalArgs = [filled.exe, ...filled.args];
+    return { command: 'wt.exe', args: terminalArgs, displayCommand: displayCommand('wt', terminalArgs) };
+  }
+  // <END Tharyn | ZedMax
   const config = loadPortableConfigFromSettingsFile();
   const provider = config.providers.claude;
   if (!provider.enabled) {
@@ -335,6 +361,8 @@ export function buildAssistantLaunch(
   switch (launcherId) {
     case 'claude2':
       return buildClaudeLaunch(mode, workspaceWin, undefined, mode === 'new' ? newSessionId : undefined);
+    case 'clausor':
+      return buildClaudeLaunch(mode, workspaceWin, undefined, mode === 'new' ? newSessionId : undefined, 'clausor');
     case 'codex2':
       return buildCodexLaunch(mode, workspaceWin);
     /* START> Tharyn | CursX

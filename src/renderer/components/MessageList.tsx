@@ -33,6 +33,8 @@ interface MessageListProps {
   searchQuery?: string;      // Filter mode: only show matching messages
   highlightQuery?: string;   // Navigate mode: highlight matches in all messages
   providerId?: ProviderId;   // Cursor/Codex assistant label support
+  product?: string;
+  productLabel?: string;
 }
 
 // Extract content from message object
@@ -64,6 +66,8 @@ const MessageList = memo(function MessageList({
   searchQuery,
   highlightQuery,
   providerId,
+  product,
+  productLabel,
 }: MessageListProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [atTop, setAtTop] = useState(false);
@@ -126,10 +130,12 @@ const MessageList = memo(function MessageList({
           timestamp={msg.timestamp}
           highlightQuery={highlightQuery}
           providerId={providerId}
+          product={product}
+          productLabel={productLabel}
         />
       );
     },
-    [highlightQuery, providerId]
+    [highlightQuery, providerId, product, productLabel]
   );
 
   // Handle initial scroll position

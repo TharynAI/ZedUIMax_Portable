@@ -11,7 +11,7 @@ import type { SessionViewModel, TagInfo, ProjectInfo, BranchInfo, MessageSearchR
 import { useSettingsStore } from './settings-store';
 import { machineProfileKey, type MachineProfile } from '../../shared/portable-config';
 
-type ProviderFilter = 'all' | 'claude' | 'codex' | 'cursor';
+import type { ProviderFilter } from '../providers/display';
 
 type TreeMode = 'type' | 'project' | 'date' | 'branches' | 'favorites';
 
@@ -256,7 +256,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       let sessions: SessionViewModel[];
 
       if (searchQuery) {
-        sessions = await window.electronAPI.searchSessions(searchQuery, undefined, selectedMachineKey || undefined);
+        sessions = await window.electronAPI.searchSessions(searchQuery, undefined, selectedMachineKey || undefined, providerArg);
       } else {
         sessions = await window.electronAPI.getSessions(daysFilter, undefined, providerArg, selectedMachineKey || undefined);
       }
