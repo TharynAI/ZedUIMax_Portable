@@ -7,7 +7,7 @@
 */
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, Loader2, Play, Rocket, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Loader2, Play, Rocket, RotateCcw, X } from 'lucide-react';
 import type { LaunchClassificationNotice } from '../../shared/launch-classification';
 import { useSessionStore } from '../stores/session-store';
 
@@ -59,13 +59,15 @@ export default function LauncherMenu() {
     let active = true;
     void window.electronAPI.getLaunchClassificationNotices()
       .then(notices => {
-        if (active && notices.length > 0) setNotice(notices[notices.length - 1]);
+        const failure = notices.filter(next => next.state === 'failed').pop();
+        if (active && failure) setNotice(current => current || failure);
       })
       .catch(error => console.error('Unable to load launch classification notices:', error));
 
     const unsubscribe = window.electronAPI.onLaunchClassification(next => {
       if (!active) return;
-      setNotice(next);
+      // Classification continues in the background; only failures need a persistent notice.
+      if (next.state === 'failed') setNotice(next);
       if (next.state === 'applied') void refreshData();
     });
     return () => {
@@ -97,7 +99,7 @@ export default function LauncherMenu() {
         return false;
       }
       if (result.classification) {
-        setNotice(result.classification);
+        if (result.classification.state === 'failed') setNotice(result.classification);
         if (result.classification.state === 'applied') void refreshData();
       }
       return true;
@@ -170,13 +172,6 @@ export default function LauncherMenu() {
   );
 
   const canLaunch = Boolean(draft?.userSummary.trim() && draft?.type.trim()) && !isLaunching;
-  const noticeTone = notice?.state === 'failed'
-    ? 'failed'
-    : notice?.state === 'applied'
-      ? 'applied'
-      : notice?.state === 'unsupported'
-        ? 'unsupported'
-        : 'pending';
 
   return (
     <div className="relative" ref={menuRef}>
@@ -185,13 +180,9 @@ export default function LauncherMenu() {
       </button>
 
       {!draft && (launchError || notice) && (
-        <div role="alert" className={`launch-classification-notice ${launchError ? 'failed' : noticeTone}`}>
+        <div role="alert" className="launch-classification-notice failed">
           <span className="launch-classification-notice-icon">
-            {noticeTone === 'applied' && !launchError
-              ? <CheckCircle2 size={16} />
-              : notice?.state === 'pending' && !launchError
-                ? <Loader2 size={16} className="animate-spin" />
-                : <AlertTriangle size={16} />}
+            <AlertTriangle size={16} />
           </span>
           <div>
             <strong>{launchError ? 'Launch failed' : notice?.launcherLabel}</strong>

@@ -16,7 +16,7 @@ import BulkActionBar from './components/BulkActionBar';
 import MessageSearchResults from './components/MessageSearchResults';
 import Titlebar from './components/Titlebar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { Activity, Database, RefreshCw, Search, Settings } from 'lucide-react';
+import { Activity, ChevronDown, Database, RefreshCw, Search, Settings } from 'lucide-react';
 import { getTowerHandleLabel } from './providers/display';
 import { machineProfileKey } from '../shared/portable-config';
 /* START> Tharyn | ZedUI DisplayMenu
@@ -231,20 +231,27 @@ function MachineSelector() {
   if (machineProfiles.length === 0 || !selectedMachineKey) return null;
 
   const selectedProfile = machineProfiles.find((profile) => machineProfileKey(profile) === selectedMachineKey);
+  const machineName = selectedProfile?.machineName || 'Machine';
   return (
-    <label className="zed-machine-filter" title={selectedProfile?.machineName || 'Machine'}>
+    <label className="zed-machine-filter" title={machineName}>
       <span>Machine</span>
-      <select
-        aria-label="Machine"
-        value={selectedMachineKey}
-        onChange={(event) => void setMachineFilter(event.target.value)}
-      >
-        {machineProfiles.map((profile) => (
-          <option key={machineProfileKey(profile)} value={machineProfileKey(profile)}>
-            {profile.machineName}
-          </option>
-        ))}
-      </select>
+      <span className="zed-machine-value">
+        {/* Measure the selected name, not the native select's widest option. */}
+        <span className="zed-machine-measure" aria-hidden="true">{machineName}</span>
+        <select
+          aria-label="Machine"
+          title={machineName}
+          value={selectedMachineKey}
+          onChange={(event) => void setMachineFilter(event.target.value)}
+        >
+          {machineProfiles.map((profile) => (
+            <option key={machineProfileKey(profile)} value={machineProfileKey(profile)}>
+              {profile.machineName}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={12} aria-hidden="true" />
+      </span>
     </label>
   );
 }

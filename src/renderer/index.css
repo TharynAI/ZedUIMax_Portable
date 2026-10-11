@@ -975,6 +975,7 @@ textarea:focus-visible {
 
 .zed-view-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
@@ -1007,9 +1008,11 @@ textarea:focus-visible {
 
 .zed-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
-  flex: none;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .zed-index-state {
@@ -1456,6 +1459,7 @@ select option {
   align-items: center;
   gap: 7px;
   min-width: 0;
+  max-width: 100%;
   height: 30px;
   padding: 0 7px 0 9px;
   border: 1px solid var(--zed-line);
@@ -1465,23 +1469,56 @@ select option {
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 8px;
   font-weight: 650;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
-.zed-machine-filter select {
-  width: min(190px, 22vw);
-  min-width: 92px;
+.zed-machine-filter > span:first-child {
+  flex: none;
+}
+
+.zed-machine-value {
+  position: relative;
+  min-width: 0;
+  max-width: 360px;
   height: 22px;
+  overflow: hidden;
+  font-size: 11px;
+  text-transform: none;
+}
+
+.zed-machine-measure {
+  display: block;
+  min-width: 92px;
+  padding: 0 24px 0 4px;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.zed-machine-filter select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 24px 0 4px;
+  appearance: none;
   overflow: hidden;
   border: 0;
   background: transparent;
   color: var(--zed-text);
   font: inherit;
-  font-size: 9px;
   letter-spacing: 0;
   text-overflow: ellipsis;
   text-transform: none;
+}
+
+.zed-machine-value > svg {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  color: var(--zed-text);
+  pointer-events: none;
 }
 
 .zed-machine-filter select:focus-visible {
