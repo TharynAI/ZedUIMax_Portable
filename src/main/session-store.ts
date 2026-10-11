@@ -98,6 +98,238 @@ export interface SessionDetails extends SessionInfo {
   version: string;
 }
 
+/* START> Tharyn | ZedMax
+    2026-10-10
+    What: Bound parsed-detail retention and share one fresh file-ID index per search.
+    Why: Search rows need metadata, not repeated transcript reads or message payload copies.
+    Expected: Stat changes invalidate cached content; config, annotations and cwd stay live.
+*/
+type CodexFileIndex = Map<string, Array<{ filePath: string; stat: fs.Stats }>>;
+export interface SessionLookupContext {
+  config: PortableProviderConfig;
+  codexIndexes: Map<string, CodexFileIndex>;
+  summaryOnly: boolean;
+  preparedSummaries: Map<string, SessionDetails | null>;
+}
+
+export function createSessionLookupContext(summaryOnly = false): SessionLookupContext {
+  return { config: loadPortableConfigFromSettingsFile(), codexIndexes: new Map(), summaryOnly, preparedSummaries: new Map() };
+}
+
+const DETAILS_CACHE_LIMIT = 128;
+const DETAILS_CACHE_BYTES = 64 * 1024 * 1024;
+const detailCache = new Map<string, {
+  mtime: number; ctime: number; size: number;
+  summary: SessionDetails; full?: SessionDetails; bytes: number;
+}>();
+let detailCacheBytes = 0;
+
+function cachedSessionDetails(
+  filePath: string, parse: () => SessionDetails | null, summaryOnly = false,
+): SessionDetails | null {
+  const key = canonPath(filePath);
+  let stat: fs.Stats;
+  try { stat = fs.statSync(filePath); } catch {
+    const old = detailCache.get(key);
+    if (old) detailCacheBytes -= old.bytes;
+    detailCache.delete(key);
+    return null;
+  }
+  const old = detailCache.get(key);
+  if (old && old.mtime === stat.mtimeMs && old.ctime === stat.ctimeMs && old.size === stat.size
+    && (summaryOnly || old.full)) {
+    detailCache.delete(key); detailCache.set(key, old);
+    const value = summaryOnly ? old.summary : old.full!;
+    return { ...value, messages: summaryOnly ? [] : value.messages.slice() };
+  }
+  if (old) { detailCacheBytes -= old.bytes; detailCache.delete(key); }
+  const details = parse();
+  if (!details) return null;
+  const summary = { ...details, messages: [] };
+  // Retain only row metadata for searches; full details have a conservative source-byte budget.
+  const retainFull = !summaryOnly && stat.size <= DETAILS_CACHE_BYTES / 4;
+  const bytes = Buffer.byteLength(JSON.stringify(summary), 'utf8') * 2 + (retainFull ? stat.size * 4 : 0);
+  let after: fs.Stats;
+  try { after = fs.statSync(filePath); } catch { return summaryOnly ? summary : details; }
+  if (bytes <= DETAILS_CACHE_BYTES && after.mtimeMs === stat.mtimeMs && after.ctimeMs === stat.ctimeMs && after.size === stat.size) {
+    while (detailCache.size >= DETAILS_CACHE_LIMIT || detailCacheBytes + bytes > DETAILS_CACHE_BYTES) {
+      const first = detailCache.keys().next().value;
+      if (first === undefined) break;
+      detailCacheBytes -= detailCache.get(first)!.bytes; detailCache.delete(first);
+    }
+    detailCache.set(key, { mtime: stat.mtimeMs, ctime: stat.ctimeMs, size: stat.size,
+      summary, ...(retainFull ? { full: details } : {}), bytes });
+    detailCacheBytes += bytes;
+  }
+  return summaryOnly ? summary : { ...details, messages: details.messages.slice() };
+}
+
+export function matchesSessionSearchFilter(
+  sessionId: string, filter: string[] | undefined, context: SessionLookupContext,
+): boolean {
+  if (!filter?.length) return true;
+  const { providerId, rawId } = parseProviderSessionId(sessionId);
+  if (filter.includes(providerId)) return true;
+  if (!filter.some(id => productById(id)?.keyProvider === providerId)) return false;
+  if (providerId === 'claude') {
+    const source = findClaudeSessionSource(rawId);
+    return !!source && matchesSessionFilter({ providerId, product: source.product }, filter);
+  }
+  if (providerId === 'codex') {
+    for (const root of codexFamilyRoots(context.config)) {
+      if (findCodexFileById(rawId, root.dir, context)) {
+        return matchesSessionFilter({ providerId, product: root.product }, filter);
+      }
+    }
+  }
+  return false;
+}
+
+export async function prepareSessionSearchLookup(
+  sessionId: string, filter: string[] | undefined, context: SessionLookupContext,
+): Promise<void> {
+  const { providerId } = parseProviderSessionId(sessionId);
+  if (providerId !== 'codex' || (filter?.length && !filter.some(id =>
+    id === 'codex' || productById(id)?.keyProvider === 'codex'))) return;
+  for (const root of codexFamilyRoots(context.config)) {
+    const key = canonPath(root.dir);
+    if (context.codexIndexes.has(key)) continue;
+    const index: CodexFileIndex = new Map();
+    const stack = [root.dir];
+    while (stack.length) {
+      const current = stack.pop()!;
+      let entries: fs.Dirent[];
+      try { entries = await fs.promises.readdir(current, { withFileTypes: true }); } catch { continue; }
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        const filePath = path.join(current, entry.name);
+        if (entry.isDirectory()) stack.push(filePath);
+        else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+          try { addIndexedCodexFile(index, filePath, await fs.promises.stat(filePath)); } catch { continue; }
+          await new Promise<void>(resolve => setImmediate(resolve));
+        }
+      }
+    }
+    context.codexIndexes.set(key, index);
+  }
+}
+
+export async function prepareSessionSearchDetails(sessionId: string, context: SessionLookupContext): Promise<void> {
+  if (context.preparedSummaries.has(sessionId)) return;
+  const { providerId, rawId } = parseProviderSessionId(sessionId);
+  let filePath = '', projectPath = '', product: string | undefined;
+  if (providerId === 'claude') {
+    const source = findClaudeSessionSource(rawId);
+    if (source) ({ filePath, projectPath, product } = source);
+  } else if (providerId === 'codex') {
+    for (const root of codexFamilyRoots(context.config)) {
+      const found = findCodexFileById(rawId, root.dir, context);
+      if (found) { filePath = found; product = root.product; break; }
+    }
+  } else {
+    const source = findCursorTranscriptFile(rawId, getProviderRoot(context.config, providerId));
+    if (source) { filePath = source.filePath; projectPath = source.slug; }
+  }
+  if (!filePath) { context.preparedSummaries.set(sessionId, null); return; }
+  let stat: fs.Stats;
+  try { stat = await fs.promises.stat(filePath); } catch {
+    context.preparedSummaries.set(sessionId, null); return;
+  }
+  const cached = detailCache.get(canonPath(filePath));
+  if (cached && cached.mtime === stat.mtimeMs && cached.ctime === stat.ctimeMs && cached.size === stat.size) {
+    const details = cachedSessionDetails(filePath, () => null, true);
+    context.preparedSummaries.set(sessionId, details ? { ...details, product } : null);
+    return;
+  }
+  const details = await parseSearchSummary(filePath, providerId, rawId, projectPath);
+  if (details) {
+    // Never publish a cache hit for a transcript changed while its stream was being read.
+    const after = await fs.promises.stat(filePath).catch(() => null);
+    if (after && after.mtimeMs === stat.mtimeMs && after.ctimeMs === stat.ctimeMs && after.size === stat.size) {
+      cachedSessionDetails(filePath, () => details, true);
+    }
+  }
+  context.preparedSummaries.set(sessionId, details ? { ...details, product } : null);
+}
+
+async function parseSearchSummary(
+  filePath: string, providerId: ProviderId, rawSessionId: string, projectPath: string,
+): Promise<SessionDetails | null> {
+  let autoSummary = '', firstMessage = '', cwd = '', version = '', model = '';
+  let messageCount = 0, linesRead = 0;
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 64 * 1024 });
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) {
+      if (++linesRead % 64 === 0) await new Promise<void>(resolve => setImmediate(resolve));
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (providerId === 'claude') {
+          if (entry.type === 'summary') autoSummary = entry.summary || '';
+          else if (entry.type === 'user' || entry.type === 'assistant') {
+            messageCount++;
+            if (entry.type === 'user') {
+              let content = entry.message?.content || '';
+              if (Array.isArray(content)) content = content.filter((b: any) => b.type === 'text' && b.text).map((b: any) => b.text).join('\n');
+              if (!firstMessage && typeof content === 'string') firstMessage = content.length > 200 ? content.slice(0, 200) + '...' : content;
+              if (!cwd) cwd = entry.cwd || '';
+              if (!version) version = entry.version || '';
+            }
+          }
+        } else if (providerId === 'codex') {
+          if (entry.type === 'session_meta' || entry.type === 'meta') {
+            const payload = entry.payload || entry.data || entry;
+            rawSessionId = payload.id || rawSessionId;
+            cwd = payload.cwd || payload.working_dir || cwd;
+            model = payload.model || payload.model_provider || payload.model_id || payload.model_name || model;
+            if (!autoSummary && payload.summary) autoSummary = String(payload.summary).slice(0, 200);
+            if (!version && payload.cli_version) version = payload.cli_version;
+          } else if (entry.type === 'response_item') {
+            const role = entry.payload?.role || entry.role || entry.message?.role;
+            if (role === 'user' || role === 'assistant') messageCount++;
+            if (role === 'user' && !firstMessage) {
+              const text = parseCodexContent(entry.payload?.content ?? entry.message?.content ?? entry.content);
+              if (text) firstMessage = text.length > 200 ? text.slice(0, 200) + '...' : text;
+            }
+          }
+        } else if (entry.role === 'user' || entry.role === 'assistant') {
+          messageCount++;
+          if (!firstMessage && entry.role === 'user') {
+            const blocks = Array.isArray(entry.message?.content) ? entry.message.content : [];
+            let text = blocks.filter((b: any) => b && typeof b === 'object').map((b: any) => {
+              if (b.type === 'text' && typeof b.text === 'string') return b.text;
+              if (b.type === 'tool_use') {
+                let input: string;
+                try { input = JSON.stringify(b.input ?? {}).slice(0, 200); } catch { input = '(unserializable input)'; }
+                return `[tool_use ${b.name || 'tool'} ${input}]`;
+              }
+              return null;
+            }).filter((text: string | null) => text !== null).join('\n');
+            const query = text.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/);
+            if (query) text = query[1];
+            firstMessage = text.length > 200 ? text.slice(0, 200) + '...' : text;
+          }
+        }
+      } catch { continue; }
+    }
+    const stat = await fs.promises.stat(filePath);
+    let projectDisplay = dirNameToDisplayPath(projectPath);
+    if (providerId === 'codex') {
+      ({ projectPath, projectDisplay } = deriveCodexProjectKey(cwd));
+      autoSummary = sanitizeSummary(autoSummary, firstMessage);
+    } else if (providerId === 'cursor') {
+      projectDisplay = cursorSlugToDisplayPath(projectPath); cwd = cursorSlugToWslPath(projectPath);
+      firstMessage = firstMessage || '(Cursor session)';
+    }
+    return { sessionId: buildSessionId(providerId, rawSessionId), rawSessionId, providerId,
+      projectPath, projectDisplay, autoSummary, firstMessage, cwd, version,
+      ...(providerId === 'codex' ? { model: model || undefined } : {}),
+      timestamp: stat.mtime, filePath, fileSize: stat.size, messageCount, messages: [] };
+  } catch { return null; } finally { lines.close(); stream.destroy(); }
+}
+// <END Tharyn | ZedMax
+
 function withMachineProfile<T extends object>(value: T, profile: MachineProfile): T & MachineProfile {
   return {
     ...value,
@@ -943,11 +1175,15 @@ function findCursorTranscriptFile(rawSessionId: string, projectsRoot: string): {
   return null;
 }
 
-function getCursorSessionDetails(rawSessionId: string, projectsRoot: string): SessionDetails | null {
+function getCursorSessionDetails(rawSessionId: string, projectsRoot: string, summaryOnly = false): SessionDetails | null {
   const found = findCursorTranscriptFile(rawSessionId, projectsRoot);
   if (!found) return null;
 
   const { filePath, slug } = found;
+  return cachedSessionDetails(filePath, () => parseCursorSessionDetails(rawSessionId, filePath, slug), summaryOnly);
+}
+
+function parseCursorSessionDetails(rawSessionId: string, filePath: string, slug: string): SessionDetails | null {
   const providerId: ProviderId = 'cursor';
   const sessionId = buildSessionId(providerId, rawSessionId);
   const projectDisplay = cursorSlugToDisplayPath(slug);
@@ -1050,19 +1286,22 @@ function getClaudeSessionDetails(rawSessionId: string, projectsRoot: string): Se
 /**
  * Get full details for a specific session (provider-aware).
  */
-export function getSessionDetails(sessionId: string): SessionDetails | null {
+export function getSessionDetails(sessionId: string, context?: SessionLookupContext): SessionDetails | null {
   const { providerId, rawId } = parseProviderSessionId(sessionId);
-  const config = loadPortableConfigFromSettingsFile();
+  const config = context?.config || loadPortableConfigFromSettingsFile();
   const providerRoot = getProviderRoot(config, providerId);
   if (!providerRoot && providerId !== 'claude') {
     return null;
   }
 
   let details: SessionDetails | null;
-  switch (providerId) {
+  if (context?.summaryOnly && context.preparedSummaries.has(sessionId)) {
+    details = context.preparedSummaries.get(sessionId) || null;
+  } else switch (providerId) {
     case 'claude': {
       const source = findClaudeSessionSource(rawId);
-      details = source ? parseSessionDetails(source.filePath, source.projectPath) : null;
+      details = source ? cachedSessionDetails(source.filePath,
+        () => parseSessionDetails(source.filePath, source.projectPath), context?.summaryOnly) : null;
       if (details && source) details.product = source.product;
       break;
     }
@@ -1078,7 +1317,7 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
       */
       details = null;
       for (const root of codexFamilyRoots(config)) {
-        details = getCodexSessionDetails(rawId, root.dir);
+        details = getCodexSessionDetails(rawId, root.dir, context);
         if (details) {
           if (root.product) details.product = root.product;
           break;
@@ -1087,7 +1326,7 @@ export function getSessionDetails(sessionId: string): SessionDetails | null {
       // <END Tharyn | CursX
       break;
     case 'cursor':
-      details = getCursorSessionDetails(rawId, providerRoot);
+      details = getCursorSessionDetails(rawId, providerRoot, context?.summaryOnly);
       break;
     default: {
       const _exhaustive: never = providerId;
@@ -1467,13 +1706,36 @@ function getCodexSessions(
   return sessions;
 }
 
-function findCodexFileById(rawSessionId: string, sessionsRoot: string): string | null {
+const codexHeaderCache = new Map<string, { mtime: number; ctime: number; size: number; rawId: string }>();
+
+function addIndexedCodexFile(index: CodexFileIndex, filePath: string, stat: fs.Stats): void {
+  const fileKey = canonPath(filePath);
+  let header = codexHeaderCache.get(fileKey);
+  if (!header || header.mtime !== stat.mtimeMs || header.ctime !== stat.ctimeMs || header.size !== stat.size) {
+    header = { mtime: stat.mtimeMs, ctime: stat.ctimeMs, size: stat.size, rawId: getCodexRawSessionId(filePath) };
+    if (codexHeaderCache.size >= 4096) codexHeaderCache.delete(codexHeaderCache.keys().next().value!);
+    codexHeaderCache.set(fileKey, header);
+  }
+  const entries = index.get(header.rawId) || [];
+  entries.push({ filePath, stat }); index.set(header.rawId, entries);
+}
+
+function codexFileIndex(sessionsRoot: string, context?: SessionLookupContext): CodexFileIndex {
+  const key = canonPath(sessionsRoot);
+  const existing = context?.codexIndexes.get(key);
+  if (existing) return existing;
+  const index: CodexFileIndex = new Map();
+  walkCodexFiles(sessionsRoot, (filePath, stat) => addIndexedCodexFile(index, filePath, stat));
+  context?.codexIndexes.set(key, index);
+  return index;
+}
+
+function findCodexFileById(rawSessionId: string, sessionsRoot: string, context?: SessionLookupContext): string | null {
   let foundFilePath: string | null = null;
   let foundMtime = -1;
   let foundSize = -1;
 
-  walkCodexFiles(sessionsRoot, (filePath, stat) => {
-    if (getCodexRawSessionId(filePath) === rawSessionId) {
+  for (const { filePath, stat } of codexFileIndex(sessionsRoot, context).get(rawSessionId) || []) {
       const candidateMtime = stat.mtime.getTime();
       if (
         !foundFilePath ||
@@ -1484,8 +1746,7 @@ function findCodexFileById(rawSessionId: string, sessionsRoot: string): string |
         foundMtime = candidateMtime;
         foundSize = stat.size;
       }
-    }
-  });
+  }
 
   return foundFilePath;
 }
@@ -1514,19 +1775,19 @@ export function getCodexProductForRawId(rawSessionId: string): string | null {
 }
 // <END Tharyn | CursX
 
-function getCodexSessionDetails(rawSessionId: string, sessionsRoot: string): SessionDetails | null {
+function getCodexSessionDetails(rawSessionId: string, sessionsRoot: string, context?: SessionLookupContext): SessionDetails | null {
   if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return null;
   }
 
-  const sessionFile = findCodexFileById(rawSessionId, sessionsRoot);
+  const sessionFile = findCodexFileById(rawSessionId, sessionsRoot, context);
   if (!sessionFile) {
     return null;
   }
 
   try {
     const stat = fs.statSync(sessionFile);
-    return parseCodexSessionDetails(sessionFile, stat);
+    return cachedSessionDetails(sessionFile, () => parseCodexSessionDetails(sessionFile, stat), context?.summaryOnly);
   } catch {
     return null;
   }

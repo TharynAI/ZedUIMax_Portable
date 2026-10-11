@@ -18,6 +18,7 @@
     "test:launch-classification": "node test/test-launch-classification.js",
     "test:launch-classification:electron": "electron test/test-launch-classification-electron.js --no-sandbox",
     "test:clausor": "electron test/test-clausor-electron.js --no-sandbox",
+    "test:search-performance": "electron test/test-search-performance-electron.js --no-sandbox",
     "test:clausor:ui": "electron test/test-cursx-rocket-electron.js --product=clausor --no-sandbox",
     "test:launch-popup": "electron test/test-launch-popup-electron.js --no-sandbox",
     "test:machine-selector": "electron test/test-machine-selector-electron.js --no-sandbox",

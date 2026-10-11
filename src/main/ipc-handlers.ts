@@ -18,6 +18,10 @@ import {
   deleteSession,
   searchMessages,
   matchesSessionFilter,
+  matchesSessionSearchFilter,
+  createSessionLookupContext,
+  prepareSessionSearchLookup,
+  prepareSessionSearchDetails,
 } from './session-store';
 import {
   getAnnotation,
@@ -199,19 +203,33 @@ export function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('sessions:search', async (_, query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => {
-    const results = search(query, DEFAULT_LIMIT);
-
-    // Enhance results with full session info
+    const resultLimit = limit === undefined ? 20 : Number.isSafeInteger(limit) && limit > 0 ? limit : 0;
+    if (!resultLimit) return [];
+    const context = createSessionLookupContext(true);
+    if (!matchesMachineProfile(context.config.machine, machineKey)) return [];
     const matches: ReturnType<typeof enhanceSession>[] = [];
-    for (const r of results) {
-      const details = getSessionDetails(r.sessionId);
-      if (details && matchesSessionFilter(details, providerFilter) && matchesMachineProfile({
-        machineName: details.machineName || '',
-        machineId: details.machineId ?? null,
-      }, machineKey)) {
-        matches.push(enhanceSession(details));
-        if (matches.length >= (limit || 20)) break;
+    let offset = 0;
+    // Rank is preserved across bounded pages, even when foreign or missing rows are skipped.
+    while (matches.length < resultLimit) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      const results = search(query, resultLimit, offset);
+      for (const r of results) {
+        await prepareSessionSearchLookup(r.sessionId, providerFilter, context);
+        if (!matchesSessionSearchFilter(r.sessionId, providerFilter, context)) continue;
+        // Let queued main-process IPC/window work run between row enrichments.
+        await new Promise<void>(resolve => setImmediate(resolve));
+        await prepareSessionSearchDetails(r.sessionId, context);
+        const details = getSessionDetails(r.sessionId, context);
+        if (details && matchesSessionFilter(details, providerFilter) && matchesMachineProfile({
+          machineName: details.machineName || '',
+          machineId: details.machineId ?? null,
+        }, machineKey)) {
+          matches.push(enhanceSession(details));
+          if (matches.length >= resultLimit) break;
+        }
       }
+      if (results.length < resultLimit) break;
+      offset += results.length;
     }
     return matches;
   });

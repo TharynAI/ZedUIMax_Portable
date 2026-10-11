@@ -580,7 +580,8 @@ export function removeTag(sessionId: string, tag: string): string[] {
 /**
  * Full-text search across annotations.
  */
-export function search(query: string, limit: number = 20): SearchResult[] {
+export function search(query: string, limit: number = 20, offset: number = 0): SearchResult[] {
+  if (!Number.isSafeInteger(limit) || limit <= 0) return [];
   const db = getDb();
 
   const results = db.prepare(`
@@ -594,8 +595,8 @@ export function search(query: string, limit: number = 20): SearchResult[] {
     FROM session_fts
     WHERE session_fts MATCH ?
     ORDER BY rank
-    LIMIT ?
-  `).all(query, limit) as any[];
+    LIMIT ? OFFSET ?
+  `).all(query, limit, offset) as any[];
 
   return results.map(row => ({
     sessionId: row.session_id,
