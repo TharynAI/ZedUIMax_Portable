@@ -50,7 +50,7 @@ app.whenReady().then(async () => {
   ] }));
   config.providers.claude.enabled = true;
   config.providers.claude.projectsDir = normalRoot;
-  config.providers.claude.binaryPathWsl = '/fixture/claude';
+  config.providers.claude.binaryPathWsl = '/fixture/bin/claude2';
   config.wsl.enabled = true; config.wsl.distroName = 'Fixture';
   config.defaultWorkspaceWin = workspace;
   const saveConfig = () => fs.writeFileSync(path.join(fixture, 'settings.json'), JSON.stringify({ portableConfig: config }));
@@ -108,7 +108,7 @@ app.whenReady().then(async () => {
     assert.equal(exact.args.at(-1), rawClausor);
     const picker = launch.buildAssistantLaunch('clausor', 'resume', workspace);
     assert(!picker.args.includes('--session')); assert(!picker.args.includes(''));
-    assert(launch.buildAssistantLaunch('claude2', 'new', workspace, rawNormal).args.includes('/fixture/claude'));
+    assert(launch.buildAssistantLaunch('claude2', 'new', workspace, rawNormal).args.includes('/fixture/bin/claude2'));
   });
   await launcher.continueSession(clausorId);
   check('Continue and both copied-command paths use Clausor', () => {
@@ -213,7 +213,7 @@ app.whenReady().then(async () => {
   check('absent registry retains default Claude discovery and launch', () => {
     assert.equal(store.getSessions(['claude'], 30)[0].sessionId, normalId);
     assert.throws(() => launch.buildAssistantLaunch('clausor', 'new', workspace), /refusing to launch it as Claude/);
-    assert(launch.buildAssistantLaunch('claude2', 'new', workspace).args.includes('/fixture/claude'));
+    assert(launch.buildAssistantLaunch('claude2', 'new', workspace).args.includes('/fixture/bin/claude2'));
   });
   console.log(JSON.stringify({ result: 'PASS', checks, fixture, pid: process.pid }));
   app.exit(0);

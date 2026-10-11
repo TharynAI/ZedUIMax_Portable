@@ -20,8 +20,8 @@ export const MIN_SESSION_SIZE = 4096; // Filter out empty/aborted sessions
 
 // Environment variables for Claude launches
 export const LAUNCH_ENV = {
-  CLAUDE_ALLOW_ROOT_BYPASS: '1',
   CLAUDE_DISABLE_UPDATES: '1',
+  CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1',
 };
 
 // IPC Channels

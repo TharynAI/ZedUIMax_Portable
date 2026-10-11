@@ -48,11 +48,22 @@ export interface PortableProviderBase {
 
 export interface ClaudeProviderConfig extends PortableProviderBase {
   projectsDir: string;
+  // Retained settings key; normal Claude accepts only the Claude2 entry point.
   binaryPathWsl: string;
   mcpConfigPathWsl?: string;
   launchMode: 'direct' | 'script';
   newSessionScriptWsl?: string;
   resumeScriptWsl?: string;
+}
+
+export function normalizeClaudeEntryPointPath(value: string): string {
+  const candidate = value.trim();
+  const legacy = candidate.match(/^(.*)\/node_modules\/(?:\.bin\/claude|@anthropic-ai\/claude-code(?:-linux-x64(?:-musl)?)?\/(?:claude|cli\.js))$/);
+  return legacy ? `${legacy[1]}/bin/claude2` : candidate;
+}
+
+export function isClaudeEntryPointPath(value: string): boolean {
+  return value.startsWith('/') && value.endsWith('/bin/claude2') && !value.includes('\0');
 }
 
 export interface CodexProviderConfig extends PortableProviderBase {

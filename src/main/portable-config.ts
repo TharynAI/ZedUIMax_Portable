@@ -4,6 +4,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getRuntimePaths } from './runtime-paths';
+import { isClaudeEntryPointPath, normalizeClaudeEntryPointPath } from '../shared/portable-config';
 import type {
   PortableDiagnosticCheck,
   PortableDiagnosticsReport,
@@ -163,7 +164,7 @@ export function normalizePortableConfig(value: unknown): PortableProviderConfig 
         status: asStatus(claude.status, emptyStatus(claudeEnabled)),
         verifiedAt: asString(claude.verifiedAt) || undefined,
         projectsDir: asString(claude.projectsDir, defaults.providers.claude.projectsDir),
-        binaryPathWsl: asString(claude.binaryPathWsl, defaults.providers.claude.binaryPathWsl),
+        binaryPathWsl: normalizeClaudeEntryPointPath(asString(claude.binaryPathWsl, defaults.providers.claude.binaryPathWsl)),
         mcpConfigPathWsl: asString(claude.mcpConfigPathWsl, defaults.providers.claude.mcpConfigPathWsl),
         launchMode: claude.launchMode === 'script' ? 'script' : 'direct',
         newSessionScriptWsl: asString(claude.newSessionScriptWsl, defaults.providers.claude.newSessionScriptWsl),
@@ -457,7 +458,9 @@ export async function testProvider(configValue: unknown, provider: PortableProvi
     case 'claude':
       checks = [
         fileCheck('claude.projectsDir', 'Claude projects directory', config.providers.claude.projectsDir, config.providers.claude.enabled),
-        await wslExecutableCheck('claude.binary', 'Claude binary', config.wsl.distroName, config.providers.claude.binaryPathWsl, config.providers.claude.enabled),
+        config.providers.claude.enabled && !isClaudeEntryPointPath(config.providers.claude.binaryPathWsl)
+          ? { id: 'claude.binary', label: 'Claude2 entry point', status: 'warning', detail: 'Configure the Claude2 installation bin/claude2 entry point, not a Claude binary.' }
+          : await wslExecutableCheck('claude.binary', 'Claude2 entry point', config.wsl.distroName, config.providers.claude.binaryPathWsl, config.providers.claude.enabled),
       ];
       break;
     case 'codex':

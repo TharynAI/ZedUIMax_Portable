@@ -282,18 +282,26 @@ function providerStatus(enabled) {
   return enabled ? 'userConfigured' : 'disabled';
 }
 
+function normalizeClaudeEntryPointPath(value) {
+  const candidate = value.trim();
+  const legacy = candidate.match(/^(.*)\/node_modules\/(?:\.bin\/claude|@anthropic-ai\/claude-code(?:-linux-x64(?:-musl)?)?\/(?:claude|cli\.js))$/);
+  return legacy ? `${legacy[1]}/bin/claude2` : candidate;
+}
+
 function buildPortableConfig(sourceSettings, appRoot, dataRoot) {
   const wsl = detectWsl();
   const projectsRoot = existsWin('E:\\ZedBang\\Projects') ? 'E:\\ZedBang\\Projects' : path.join(os.homedir(), 'Documents');
 
-  const claudeBinaryPathWsl = sourceSettings.claudeBinaryPath
-    || '/mnt/e/ZedBang/CLI/Cust/Claude2/node_modules/@anthropic-ai/claude-code-linux-x64/claude';
+  const configuredClaudePath = sourceSettings.claudeBinaryPath || '/mnt/e/ZedBang/CLI/Cust/Claude2/bin/claude2';
+  const claudeBinaryPathWsl = normalizeClaudeEntryPointPath(configuredClaudePath);
+  const claudeRootWsl = path.posix.dirname(path.posix.dirname(claudeBinaryPathWsl));
   const claudeMcpConfigPathWsl = sourceSettings.mcpConfigPath
-    || '/mnt/e/ZedBang/CLI/Cust/Claude2/claude2.mpcSet.json';
+    || `${claudeRootWsl}/claude2.mpcSet.json`;
   const claudeProjectsDir = appendUnc(wsl.userHomeUnc, '.claude', 'projects');
-  const claudeNewScriptWsl = '/mnt/e/ZedBang/CLI/Cust/Claude2/_Launcher/launch-with-validation.sh';
-  const claudeResumeScriptWsl = '/mnt/e/ZedBang/CLI/Cust/Claude2/_Launcher/launch-with-validation-resume.sh';
+  const claudeNewScriptWsl = `${claudeRootWsl}/_Launcher/launch-with-validation.sh`;
+  const claudeResumeScriptWsl = `${claudeRootWsl}/_Launcher/launch-with-validation-resume.sh`;
   const claudeEnabled = wsl.enabled
+    && claudeBinaryPathWsl.endsWith('/bin/claude2')
     && existsWin(claudeProjectsDir)
     && existsWsl(claudeBinaryPathWsl)
     && existsWsl(claudeMcpConfigPathWsl)
@@ -486,7 +494,7 @@ function main() {
   const mergedSettings = {
     ...targetSettings,
     ...sourceSettings,
-    claudeBinaryPath: sourceSettings.claudeBinaryPath || portableConfig.providers.claude.binaryPathWsl,
+    claudeBinaryPath: portableConfig.providers.claude.binaryPathWsl,
     mcpConfigPath: sourceSettings.mcpConfigPath || portableConfig.providers.claude.mcpConfigPathWsl,
     portableConfig,
   };
@@ -613,9 +621,12 @@ function main() {
   }, null, 2));
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(`Migration failed: ${error.message}`);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error(`Migration failed: ${error.message}`);
+    process.exit(1);
+  }
 }
+module.exports = { normalizeClaudeEntryPointPath };

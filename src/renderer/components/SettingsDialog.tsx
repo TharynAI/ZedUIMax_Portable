@@ -243,7 +243,7 @@ function SettingsDialog() {
         {provider === 'claude' && (
           <div className="space-y-2">
             <PathInput label="Projects Dir" value={portableConfig.providers.claude.projectsDir} onChange={(value) => updateProvider('projectsDir', value)} />
-            <PathInput label="Binary" value={portableConfig.providers.claude.binaryPathWsl} onChange={(value) => updateProvider('binaryPathWsl', value)} />
+            <PathInput label="Claude2 Entry (WSL)" value={portableConfig.providers.claude.binaryPathWsl} onChange={(value) => updateProvider('binaryPathWsl', value)} />
             <PathInput label="MCP Config" value={portableConfig.providers.claude.mcpConfigPathWsl || ''} onChange={(value) => updateProvider('mcpConfigPathWsl', value)} />
           </div>
         )}

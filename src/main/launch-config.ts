@@ -1,9 +1,11 @@
 import { LAUNCH_ENV } from '../shared/constants';
+import path from 'path';
 import { fillCommand, productById } from './agent-products';
 import type { ProviderId } from '../shared/constants';
 import { loadPortableConfigFromSettingsFile } from './portable-config';
 import { toWslPath, wslToWindowsPath } from './provider-utils';
 import type { PortableProviderConfig } from '../shared/portable-config';
+import { isClaudeEntryPointPath } from '../shared/portable-config';
 
 export type CodexVariant = 'codex' | 'codexSub';
 export type AssistantLauncherId = 'claude2' | 'clausor' | 'codex2' | 'cursx' | 'cursor' | 'gemini3';
@@ -73,6 +75,7 @@ function claudeCommandArgs(
   const args = [
     'env',
     ...Object.entries(LAUNCH_ENV).map(([key, value]) => `${key}=${value}`),
+    `CLAUDE2_ROOT=${path.posix.dirname(path.posix.dirname(binaryPathWsl))}`,
     binaryPathWsl,
     '--permission-mode',
     'bypassPermissions',
@@ -95,7 +98,8 @@ function claudeShellCommand(
   resumeId?: string,
   newSessionId?: string,
 ): string {
-  const envPrefix = Object.entries(LAUNCH_ENV).map(([key, value]) => `${key}=${value}`).join(' ');
+  const envPrefix = ['env', ...Object.entries(LAUNCH_ENV).map(([key, value]) => `${key}=${wslQuote(value)}`),
+    `CLAUDE2_ROOT=${wslQuote(path.posix.dirname(path.posix.dirname(binaryPathWsl)))}`].join(' ');
   const mcpArg = mcpConfigPathWsl ? ` --mcp-config ${wslQuote(mcpConfigPathWsl)}` : '';
   const resumeArg = resumeId ? ` --resume ${wslQuote(resumeId)}` : '';
   const sessionArg = !resumeId && newSessionId ? ` --session-id ${wslQuote(newSessionId)}` : '';
@@ -142,18 +146,27 @@ export function buildClaudeLaunch(
 
   const wslCwd = toWslPath(cwd);
   const script = mode === 'resume' ? provider.resumeScriptWsl?.trim() : provider.newSessionScriptWsl?.trim();
+  const approvedScripts = mode === 'resume' ? ['launch-with-validation-resume.sh'] : ['launch-with-validation.sh', 'launch-sessions.sh'];
+  const scriptRoot = script && approvedScripts.includes(path.posix.basename(script)) && path.posix.basename(path.posix.dirname(script)) === '_Launcher'
+    ? path.posix.dirname(path.posix.dirname(script)) : '';
+  const entryPoint = provider.binaryPathWsl.trim() || (scriptRoot ? `${scriptRoot}/bin/claude2` : '');
+  if (!isClaudeEntryPointPath(entryPoint)) {
+    throw new Error('Claude2 entry point is not configured. Set Claude2 Entry (WSL) to the installation bin/claude2 in Portable Setup. Direct Claude binaries are not supported.');
+  }
+  const claudeRoot = path.posix.dirname(path.posix.dirname(entryPoint));
   if (script) {
-    let scriptArgs = mode === 'resume' && resumeId ? [script, wslCwd, resumeId] : [script, wslCwd];
-    if (mode === 'new' && newSessionId) {
-      // The canonical Claude2 wrapper already consumes CLAUDE2_EXTRA_ARGS and forwards it to
-      // both Claude and ZedCache. Use one process-scoped assignment; no global config changes.
-      scriptArgs = ['env', `CLAUDE2_EXTRA_ARGS=--session-id ${newSessionId}`, script, wslCwd];
+    if (!scriptRoot || scriptRoot !== claudeRoot) {
+      throw new Error('Claude launch scripts must be the matching Claude2 _Launcher wrappers, or leave them empty to use bin/claude2.');
     }
-    if (mode === 'resume' && resumeId && provider.binaryPathWsl.trim()) {
-      scriptArgs.push(provider.binaryPathWsl.trim());
-      if (provider.mcpConfigPathWsl?.trim()) {
-        scriptArgs.push(provider.mcpConfigPathWsl.trim());
-      }
+    const scriptArgs = ['env', `CLAUDE2_ROOT=${claudeRoot}`];
+    if (mode === 'new' && newSessionId) {
+      scriptArgs.push(`CLAUDE2_EXTRA_ARGS=--session-id ${newSessionId}`);
+    }
+    scriptArgs.push(script, wslCwd);
+    if (mode === 'resume') {
+      scriptArgs.push(resumeId || '');
+      // The wrapper ignores retired $3, but still expects the optional MCP path at $4.
+      if (provider.mcpConfigPathWsl?.trim()) scriptArgs.push('', provider.mcpConfigPathWsl.trim());
     }
     const args = wtWslArgs(config, '', scriptArgs);
     return {
@@ -164,16 +177,11 @@ export function buildClaudeLaunch(
     };
   }
 
-  const binaryPathWsl = provider.binaryPathWsl.trim();
-  if (!binaryPathWsl) {
-    throw new Error('Claude binary path is not configured.');
-  }
   if (mode === 'resume' && !resumeId) {
     throw new Error('Claude latest-resume requires a configured resume script.');
   }
-
   const commandArgs = claudeCommandArgs(
-    binaryPathWsl,
+    entryPoint,
     provider.mcpConfigPathWsl?.trim(),
     mode === 'resume' ? resumeId : undefined,
     mode === 'new' ? newSessionId : undefined,
@@ -184,7 +192,7 @@ export function buildClaudeLaunch(
     args,
     displayCommand: displayCommand('wt', args),
     wslShellCommand: claudeShellCommand(
-      binaryPathWsl,
+      entryPoint,
       provider.mcpConfigPathWsl?.trim(),
       wslCwd,
       mode === 'resume' ? resumeId : undefined,
