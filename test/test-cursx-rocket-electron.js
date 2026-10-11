@@ -138,6 +138,8 @@ app.whenReady().then(async () => {
   for (const [mode, command] of [['New', product.launch], ['Resume', product.resume]]) {
     await choose(mode);
     if (mode === 'new' || mode === 'New') await classify();
+    assert.equal(await evaluate(`!!document.querySelector('.launch-classification-notice')`), false,
+      'Successful New/Resume must not leave a notice requiring dismissal');
     const call = calls.at(-1);
     const nativeId = mode === 'New' && testedProduct === 'clausor' ? call.args.at(-1) : undefined;
     const filled = products.fillCommand(command, { cwd: config.defaultWorkspaceWin });
@@ -170,8 +172,12 @@ app.whenReady().then(async () => {
   await evaluate(`Array.from(document.querySelector('form[role="dialog"]').querySelectorAll('button')).find(b => b.textContent === 'Cancel').click()`);
   await waitFor(`!!document.querySelector('[role="alert"]')`);
   await evaluate(`document.querySelector('button[aria-label="Dismiss launch notice"]').click()`);
-  await waitFor(`document.querySelector('[role="alert"] strong')?.textContent === '${productLabel}'`);
-  await evaluate(`document.querySelector('button[aria-label="Dismiss launch notice"]').click()`);
+  if (testedProduct === 'cursx') {
+    await waitFor(`document.querySelector('[role="alert"] strong')?.textContent === '${productLabel}'`);
+    assert.match(await evaluate(`document.querySelector('[role="alert"] p').textContent`), /launch failed/,
+      'Only the genuine pending-classification failure should remain');
+    await evaluate(`document.querySelector('button[aria-label="Dismiss launch notice"]').click()`);
+  }
   await waitFor(`!document.querySelector('[role="alert"]')`);
   console.log('PASS: persistent visible error and dismissal; no real subprocess or live database used');
   clearTimeout(timeout);
