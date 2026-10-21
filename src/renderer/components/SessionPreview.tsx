@@ -503,7 +503,8 @@ function PreviewNotes({ session }: { session: any }) {
 }
 
 function PreviewActions({ session }: { session: any }) {
-  const { continueSession, branchSession } = useSessionStore();
+  const { continueSession, branchSession, launchError, clearLaunchError } = useSessionStore();
+  const actionError = launchError && launchError.sessionId === session.sessionId ? launchError.message : null;
 
   const handleContinue = () => {
     continueSession(session.sessionId);
@@ -590,6 +591,18 @@ function PreviewActions({ session }: { session: any }) {
           <FolderOpen size={14} />
         </button>
       </div>
+      {/* START> Tharyn | ZedUIMax Large Transcripts
+          2026-10-21
+          What: Show a Continue/Branch failure under the action row.
+          Why: The error was only logged, so a failed Continue looked like "nothing happened".
+          Expected: The reason appears here until dismissed or the next attempt. */}
+      {actionError && (
+        <div role="alert" className="flex items-start gap-2 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <span className="min-w-0 flex-1 break-words">{actionError}</span>
+          <button onClick={clearLaunchError} className="shrink-0 opacity-70 hover:opacity-100" title="Dismiss" aria-label="Dismiss error">x</button>
+        </div>
+      )}
+      {/* <END Tharyn | ZedUIMax Large Transcripts */}
     </div>
   );
 }

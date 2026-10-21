@@ -124,6 +124,10 @@ interface SessionStore {
   addTags: (sessionId: string, tags: string[]) => Promise<void>;
   removeTag: (sessionId: string, tag: string) => Promise<void>;
   continueSession: (sessionId: string) => Promise<void>;
+  // START> Tharyn | ZedUIMax Large Transcripts (2026-10-21): Continue/Branch failures were console-only.
+  launchError: { sessionId: string; message: string } | null;
+  clearLaunchError: () => void;
+  // <END Tharyn | ZedUIMax Large Transcripts
   branchSession: (sessionId: string, branchName?: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<boolean>;
   cleanupOldestUngrouped: (limit: number) => Promise<number>;
@@ -187,6 +191,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   error: null,
   selectedSessionId: null,
   selectedSession: null,
+  launchError: null,
   selectedSessionIds: new Set<string>(),
   isMultiSelectMode: false,
   searchQuery: '',
@@ -578,11 +583,18 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   continueSession: async (sessionId) => {
     try {
       const { codexVariant } = useSettingsStore.getState().settings as any;
+      set({ launchError: null });
       await window.electronAPI.continueSession(sessionId, codexVariant);
     } catch (error) {
       console.error('Failed to continue session:', error);
+      // START> Tharyn | ZedUIMax Large Transcripts (2026-10-21): show the failure, not just log it.
+      const text = error instanceof Error ? error.message : String(error);
+      set({ launchError: { sessionId, message: `Continue failed: ${text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}` } });
+      // <END Tharyn | ZedUIMax Large Transcripts
     }
   },
+
+  clearLaunchError: () => set({ launchError: null }),
 
   /* START> 2025-12-05 | Sphere -> Tharyn | CC
   * Branch session: Creates new session file with copied content
@@ -600,6 +612,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       if (!result.success) {
         console.error('[Store] Branch failed:', result.error);
+        set({ launchError: { sessionId, message: `Branch failed: ${result.error}` } }); // Tharyn | ZedUIMax Large Transcripts 2026-10-21
         return;
       }
 
