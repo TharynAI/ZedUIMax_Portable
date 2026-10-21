@@ -11,6 +11,7 @@ import fs from 'fs';
 import { canonPath, productById, productForFile, productsForProvider, toNativeReadPath } from './agent-products';
 import path from 'path';
 import readline from 'readline';
+import { forEachLineSync } from './jsonl-lines';
 import {
   DEFAULT_DAYS,
   DEFAULT_LIMIT,
@@ -1563,11 +1564,10 @@ function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDeta
   const messages: any[] = [];
 
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    // START> Tharyn | ZedUIMax Large Transcripts (2026-10-21): stream lines; see jsonl-lines.ts.
+    forEachLineSync(filePath, (line) => {
+      if (!line.trim()) return;
+      // <END Tharyn | ZedUIMax Large Transcripts
       try {
         const entry = JSON.parse(line);
         const entryType = entry.type || '';
@@ -1606,9 +1606,9 @@ function parseCodexSessionDetails(filePath: string, stat: fs.Stats): SessionDeta
           }
         }
       } catch {
-        continue;
+        return;
       }
-    }
+    });
 
     // Use file modification time to reflect latest activity (resume/appends)
     timestamp = stat.mtime;
@@ -2350,8 +2350,6 @@ function searchCodexMessages(
 
       let messageIndex = 0;
       try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
         /* START> Tharyn | SessionIdentity
             2026-09-06
             What: Strip the canonical rollout prefix as well as the legacy epoch one.
@@ -2370,8 +2368,10 @@ function searchCodexMessages(
         // <END Tharyn | SessionIdentity
         const sessionId = buildSessionId('codex', rawSessionId);
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
+        // START> Tharyn | ZedUIMax Large Transcripts (2026-10-21): stream lines; see jsonl-lines.ts.
+        forEachLineSync(filePath, (line) => {
+          if (!line.trim()) return;
+          // <END Tharyn | ZedUIMax Large Transcripts
           try {
             const entry = JSON.parse(line);
             if (entry.type === 'response_item') {
@@ -2400,15 +2400,15 @@ function searchCodexMessages(
                     matchLength: query.length,
                     timestamp,
                   });
-                  if (results.length >= limit) return;
+                  if (results.length >= limit) return false;
                 }
               }
               messageIndex++;
             }
           } catch {
-            continue;
+            return;
           }
-        }
+        });
       } catch {
         return;
       }

@@ -9,6 +9,7 @@ import { execFile } from 'child_process';
 import { getCodexProductForRawId } from './session-store';
 import { promisify } from 'util';
 import fs from 'fs';
+import { forEachLineSync } from './jsonl-lines';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
@@ -587,10 +588,15 @@ export async function branchSession(
      * No longer need a branch prompt - agent sees full conversation naturally
      */
     // 1. Read source file and replace session IDs in each entry
-    const sourceContent = fs.readFileSync(sourceFile, 'utf-8');
-    const lines = sourceContent.split('\n');
-
-    const updatedLines = lines.map(line => {
+    /* START> Tharyn | ZedUIMax Large Transcripts
+        2026-10-21
+        What: Stream the parent transcript line by line into the child file.
+        Why: readFileSync(..., 'utf-8') throws past ~512 MiB, so long Codex sessions could not branch.
+        Expected: Same per-line rewrite as before, for any transcript size.
+    */
+    const out = fs.openSync(destFile, 'w');
+    let lineCount = 0;
+    const rewriteLine = (line: string): string => {
       if (!line.trim()) return line;
 
       try {
@@ -628,10 +634,18 @@ export async function branchSession(
         // Non-JSON line (shouldn't happen), keep as-is
         return line;
       }
-    });
-
-    fs.writeFileSync(destFile, updatedLines.join('\n'));
-    safeLog(`[BRANCH] Created branch with ${lines.length} entries, sessionId updated: ${parentSessionId} -> ${newSessionId}`);
+    };
+    try {
+      forEachLineSync(sourceFile, (line) => {
+        // Every line keeps its terminator, so Codex's next append starts on a fresh line.
+        fs.writeSync(out, rewriteLine(line) + '\n');
+        lineCount++;
+      });
+    } finally {
+      fs.closeSync(out);
+    }
+    // <END Tharyn | ZedUIMax Large Transcripts
+    safeLog(`[BRANCH] Created branch with ${lineCount} entries, sessionId updated: ${parentSessionId} -> ${newSessionId}`);
     // <END | Tharyn | ZedUI Branch Fix
 
     // Ensure parent annotation exists using provider-prefixed ID for FK branch links.
