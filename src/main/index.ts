@@ -4,6 +4,16 @@ import { setupIpcHandlers, loadSettings, saveSettingsToFile } from './ipc-handle
 import { initDb } from './metadata-db';
 import { ensureRuntimeWritableDirs, initializeRuntimePaths } from './runtime-paths';
 import { startLaunchClassificationService } from './launch-classifier';
+import { existsSync as appIconExists } from 'fs';
+/* START> Tharyn | ZedUIMax
+    2026-11-01
+    What: Unique taskbar identity: own AppUserModelID + window icon from build/icon.ico (ZedIcons registry).
+    Why:  Tharyn's global requirement; without these, unpackaged/dev runs show the default Electron icon.
+    Expected: taskbar shows this app's icon, never Electron's. Do not remove (see Apps CLAUDE.md icon rule).
+*/
+app.setAppUserModelId('com.zedbang.zeduimax');
+const APP_ICON = app.isPackaged ? path.join(process.resourcesPath, 'icon.ico') : path.join(app.getAppPath(), 'build', 'icon.ico'); // packaged: resources\icon.ico (asar can't serve .ico to Windows)
+// <END Tharyn | ZedUIMax
 
 let mainWindow: BrowserWindow | null = null;
 let isAppClosing = false;
@@ -100,6 +110,7 @@ function createWindow() {
   // <END Tharyn | ZedUI WindowBounds
 
   mainWindow = new BrowserWindow({
+    ...(appIconExists(APP_ICON) ? { icon: APP_ICON } : {}), // Tharyn | ZedUIMax 2026-11-01 unique taskbar icon
     ...bounds,
     minWidth: 800,
     minHeight: 600,

@@ -27,7 +27,7 @@
     "test:zedmax-shell": "electron test/test-zedmax-shell-electron.js --no-sandbox",
     "migrate:local-data": "node scripts/migrate-local-data.js",
     "test:ui": "node scripts/test-runner.js",
-    "package": "npm run build && electron-builder",
+    "package": "node scripts/preflight-icon.cjs && npm run build && electron-builder",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -70,10 +70,16 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "build/icon.ico",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      { "from": "build/icon.ico", "to": "icon.ico" }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     }
   }
 }
