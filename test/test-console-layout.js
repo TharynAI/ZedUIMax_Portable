@@ -5,6 +5,7 @@ const path = require('path');
 const build = process.env.ZEDUI_CONSOLE_BUILD || path.join(__dirname, '..', 'dist', 'main', 'main');
 const { captureConsoleLayout, previewConsoleLayout } = require(path.join(build, 'console-layout'));
 const { storeConsoleObservation } = require(path.join(build, 'console-layout-store'));
+const { renderConsoleLayoutReport } = require(path.join(build, 'console-layout-report'));
 const id = '11111111-1111-4111-8111-111111111111';
 const now = Date.now();
 function fixture() {
@@ -142,5 +143,22 @@ test('Atomic snapshots bounded to five rotations, protected files and nonempty l
     fs.writeFileSync(path.join(dir, 'console-layout', '.capture.lock'), 'peer');
     assert.throws(() => storeConsoleObservation(dir, s), /EEXIST/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('Static report escapes names/recipes, keeps argv exact and includes feedback contract', () => {
+  const s = captureConsoleLayout(fixture());
+  s.windows[0].tabs[0].title = '<script>alert("x")</script>';
+  s.windows[0].tabs[0].recipe.args = ['/mnt/d/a path', '</pre><script>attack</script>'];
+  const html = renderConsoleLayoutReport(s);
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('/mnt/d/a path'));
+  assert.ok(html.includes('data-zedremote-feedback="v1"'));
+  assert.ok(html.includes('Review only. Nothing will move or restart.'));
+});
+test('Report omits malformed numeric geometry from SVG attributes', () => {
+  const s = captureConsoleLayout(fixture());
+  s.panels[0].rect.x = '0" onload="attack'; s.windows[0].observedRect.x = '0" onload="attack';
+  const html = renderConsoleLayoutReport(s);
+  assert.ok(!html.includes('onload="attack'));
 });
 console.log(`${count}/${count} console-layout fixtures passed`);
