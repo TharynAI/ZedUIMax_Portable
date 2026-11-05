@@ -154,6 +154,8 @@ test('Static report escapes names/recipes, keeps argv exact and includes feedbac
   assert.ok(html.includes('/mnt/d/a path'));
   assert.ok(html.includes('data-zedremote-feedback="v1"'));
   assert.ok(html.includes('Review only. Nothing will move or restart.'));
+  assert.ok(html.includes('Guardian is the restore controller.'));
+  assert.ok(!html.includes('Choose one restore controller'));
 });
 test('Report omits malformed numeric geometry from SVG attributes', () => {
   const s = captureConsoleLayout(fixture());
