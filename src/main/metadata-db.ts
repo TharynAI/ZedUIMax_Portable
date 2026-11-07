@@ -578,25 +578,46 @@ export function removeTag(sessionId: string, tag: string): string[] {
 }
 
 /**
- * Full-text search across annotations.
+ * Search annotation text and literal fragments of the current Tower call sign.
  */
 export function search(query: string, limit: number = 20, offset: number = 0): SearchResult[] {
   if (!Number.isSafeInteger(limit) || limit <= 0) return [];
+  query = query.trim();
+  if (!query) return [];
   const db = getDb();
 
-  const results = db.prepare(`
-    SELECT
-      session_id,
-      user_summary,
-      notes,
-      auto_summary,
-      first_message,
-      rank
+  /* START> Tharyn | ZedMax
+      2026-11-07
+      What: Include case-insensitive call-sign fragments without an FTS migration.
+      Why: Tower renames must be searchable immediately, including pipes and partial words.
+      Expected: Name hits precede content hits; one result per session, with stable paging.
+  */
+  const statement = db.prepare(`
+    WITH name_matches AS (
+      SELECT session_id, user_summary, notes, auto_summary, first_message
+      FROM annotations
+      WHERE instr(lower(coalesce(call_sign, '')), lower(?)) > 0
+    )
+    SELECT session_id, user_summary, notes, auto_summary, first_message, 0 AS rank, 0 AS match_priority
+    FROM name_matches
+    UNION ALL
+    SELECT session_id, user_summary, notes, auto_summary, first_message, rank, 1 AS match_priority
     FROM session_fts
     WHERE session_fts MATCH ?
-    ORDER BY rank
+      AND session_id NOT IN (SELECT session_id FROM name_matches)
+    ORDER BY match_priority, rank, session_id
     LIMIT ? OFFSET ?
-  `).all(query, limit, offset) as any[];
+  `);
+  let results: any[];
+  try {
+    results = statement.all(query, query, limit, offset) as any[];
+  } catch (error) {
+    // A literal call sign may contain FTS operators; valid advanced queries keep their semantics.
+    if (!/fts5:|unterminated string|no such column:/i.test(String((error as Error).message))) throw error;
+    const literal = `"${query.replace(/"/g, '""')}"`;
+    results = statement.all(query, literal, limit, offset) as any[];
+  }
+  // <END Tharyn | ZedMax
 
   return results.map(row => ({
     sessionId: row.session_id,
