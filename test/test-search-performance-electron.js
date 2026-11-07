@@ -12,7 +12,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const packaged = process.argv.includes('--packaged');
 const appRoot = packaged ? path.join(root, 'release', 'win-unpacked') : root;
-const modules = path.join(packaged ? path.join(appRoot, 'resources', 'app.asar') : root, 'dist', 'main', 'main');
+const modules = process.env.ZEDUI_TEST_MAIN_DIR || path.join(packaged ? path.join(appRoot, 'resources', 'app.asar') : root, 'dist', 'main', 'main');
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'zedui-search-'));
 process.env.ZEDUI_APP_ROOT = appRoot;
 process.env.ZEDUI_DATA_ROOT = fixture;
@@ -92,6 +92,58 @@ app.whenReady().then(async () => {
     enriched = []; observedLimits = [];
     for (const value of [0, -1, NaN, Infinity, 1.5]) assert.deepEqual(await search('needle', value), []);
     assert.equal(enriched.length, 0); assert.equal(observedLimits.length, 0);
+  });
+  // Model Tower's external annotation writes rather than granting the app call-sign ownership.
+  const namesDb = new (require('better-sqlite3'))(path.join(fixture, 'zedui.db'));
+  const setCallSign = (id, name) => namesDb.prepare('UPDATE annotations SET call_sign = ? WHERE session_id = ?').run(name, id);
+  try {
+    setCallSign(normal.id, 'Wren | ZedUI 0');
+    setCallSign(isolated.id, 'Reef | Guard 2');
+    setCallSign(cx.id, 'Fable_50% | Advisor');
+    await check('partial call signs and role fragments match regardless of case', async () => {
+      for (const q of ['ren', 'zEdUi', '| ZedUI', 'Wren | ZedUI 0']) {
+        const hits = await search(q, 5);
+        assert.equal(hits.length, 1, q); assert.equal(hits[0].sessionId, normal.id, q);
+        assert.equal(hits[0].annotation.callSign, 'Wren | ZedUI 0');
+      }
+      assert.equal((await search('visor', 5))[0].sessionId, cx.id);
+    });
+    await check('call-sign wildcard characters are literal, not match-all patterns', async () => {
+      for (const q of ['%', '_', 'Fable_50% | Advisor']) {
+        assert.deepEqual((await search(q, 50)).map(h => h.sessionId), [cx.id], q);
+      }
+    });
+    await check('call-sign-only hits retain provider/machine filters before enrichment', async () => {
+      enriched = [];
+      assert.deepEqual(await search('Guard', 5, undefined, ['codex']), []);
+      assert.deepEqual(enriched, []);
+      assert.equal((await search('Guard', 5, undefined, ['clausor']))[0].sessionId, isolated.id);
+      enriched = [];
+      assert.deepEqual(await search('Wren', 5, 'name:foreign'), []);
+      assert.deepEqual(enriched, []);
+    });
+    await check('Tower renames are searchable immediately without rebuilding FTS', async () => {
+      setCallSign(normal.id, 'Willow | Session owner');
+      assert.deepEqual(await search('Wren', 5), []);
+      assert.equal((await search('illow', 5))[0].sessionId, normal.id);
+    });
+    await check('name/content matches deduplicate and keep deterministic bounded pages', async () => {
+      setCallSign(normal.id, 'needle | Session owner');
+      const rows = db.search('needle', 100);
+      assert.equal(rows[0].sessionId, normal.id);
+      assert.equal(rows.filter(r => r.sessionId === normal.id).length, 1);
+      assert.equal(new Set(rows.map(r => r.sessionId)).size, rows.length);
+      assert.deepEqual([...db.search('needle', 2), ...db.search('needle', 2, 2)], rows.slice(0, 4));
+      assert.equal((await search('needle', 1)).length, 1);
+      assert.deepEqual(db.search('   ', 5), []);
+    });
+  } finally {
+    for (const id of [normal.id, isolated.id, cx.id]) setCallSign(id, null);
+    namesDb.close();
+  }
+  await check('valid FTS boolean queries retain their existing semantics', async () => {
+    assert.equal((await search('needle OR absentuniquetoken', 2)).length, 2);
+    assert.deepEqual(await search('needle AND absentuniquetoken', 2), []);
   });
   await check('foreign machine rejected before SQLite or filesystem enrichment', async () => {
     enriched = []; observedLimits = []; fullReads = 0;
