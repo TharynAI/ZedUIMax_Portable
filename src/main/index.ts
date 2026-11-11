@@ -4,7 +4,7 @@ import { setupIpcHandlers, loadSettings, saveSettingsToFile } from './ipc-handle
 import { initDb } from './metadata-db';
 import { ensureRuntimeWritableDirs, initializeRuntimePaths } from './runtime-paths';
 import { startLaunchClassificationService } from './launch-classifier';
-import { existsSync as appIconExists } from 'fs';
+import { existsSync as appIconExists, mkdirSync, copyFileSync } from 'fs';
 /* START> Tharyn | ZedUIMax
     2026-11-01
     What: Unique taskbar identity: own AppUserModelID + window icon from build/icon.ico (ZedIcons registry).
@@ -125,6 +125,36 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  /* START> Tharyn | ZedUIMax Pinning
+      2026-11-11
+      What: Publish a durable icon and canonical relaunch command for Windows pins.
+      Why: A window icon alone leaves pinned dev Electron shortcuts without branding.
+      Expected: Pins keep the S icon after exit, updates and portable extraction cleanup.
+  */
+  if (process.platform === 'win32' && appIconExists(APP_ICON)) {
+    let pinIcon = APP_ICON;
+    try {
+      const branding = path.join(app.getPath('userData'), 'branding');
+      mkdirSync(branding, { recursive: true });
+      pinIcon = path.join(branding, 'icon.ico');
+      copyFileSync(APP_ICON, pinIcon);
+    } catch (error) {
+      pinIcon = APP_ICON;
+      console.warn('Could not persist taskbar icon:', error);
+    }
+    const launcher = path.join(app.getAppPath(), '_Launcher', 'zeduimax-launcher.vbs');
+    const relaunchCommand = app.isPackaged
+      ? `"${process.env.PORTABLE_EXECUTABLE_FILE || process.execPath}"`
+      : appIconExists(launcher)
+        ? `"${path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe')}" //B //nologo "${launcher}"`
+        : `"${process.execPath}" "${app.getAppPath()}"`;
+    mainWindow.setAppDetails({
+      appId: 'com.zedbang.zeduimax', appIconPath: pinIcon, appIconIndex: 0,
+      relaunchCommand, relaunchDisplayName: 'ZedUI Session Launcher'
+    });
+  }
+  // <END Tharyn | ZedUIMax Pinning
 
   /* START> Tharyn | ZedUI WindowBounds
       2026-01-02
