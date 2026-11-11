@@ -7,7 +7,6 @@ $ErrorActionPreference = 'Stop'
 
 $verbName = 'ZedUIMax_Portable_Sessions'
 $menuText = 'ZedUIMax Portable'
-$icon = 'shell32.dll,294'
 
 function Resolve-ProjectRoot {
     $scriptDir = Split-Path -Parent $PSCommandPath
@@ -74,6 +73,11 @@ function Remove-ContextMenuKey {
 }
 
 $projectRoot = Resolve-ProjectRoot
+$iconPath = Join-Path $projectRoot 'build\icon.ico'
+$icon = '"{0}",0' -f $iconPath
+if (-not $Unregister -and -not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
+    throw "App icon not found at $iconPath. Restore build\icon.ico before registration."
+}
 $vbsPath = Join-Path $projectRoot '_Launcher\zeduimax-launcher.vbs'
 if (-not (Test-Path -LiteralPath $vbsPath)) {
     throw "Launcher VBS not found at $vbsPath."
@@ -98,6 +102,7 @@ foreach ($target in $targets) {
     if ($DryRun) {
         Write-Host "Would register $($target.Label): HKCU:\$($target.Path)"
         Write-Host "  Text: $menuText"
+        Write-Host "  Icon: $icon"
         Write-Host "  Command: $command"
     } else {
         Set-ContextMenuKey -Path $target.Path -Text $menuText -IconValue $icon -Command $command
