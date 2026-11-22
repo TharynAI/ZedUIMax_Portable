@@ -163,6 +163,11 @@ try {
   assert.strictEqual(gemini.command, 'wt.exe');
   assert.strictEqual(gemini.args[0], 'powershell.exe');
   assert(gemini.args.includes('-PathFromExplorer'));
+  // 2026-11-22 Tharyn | ZedUIMax Gemini: exact session id on new, resume by id in the session's folder
+  const geminiNew = buildAssistantLaunch('gemini3', 'new', 'E:\\PortableWorkspace', '33333333-3333-4333-8333-333333333333');
+  assert(geminiNew.args.includes('-SessionId'));
+  assert(geminiNew.args.includes('33333333-3333-4333-8333-333333333333'));
+  assert(!geminiNew.args.includes('-SessionCwd'));
   assert(gemini.displayCommand.includes('C:\\PortableTools\\gemini-new.ps1'));
   assertNoLegacyPath(gemini.displayCommand);
 

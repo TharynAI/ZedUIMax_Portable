@@ -2,7 +2,7 @@
 export interface Session {
   sessionId: string;           // Provider-prefixed ID (e.g., "claude:uuid")
   rawSessionId: string;        // ID from provider file
-  providerId: 'claude' | 'codex' | 'cursor';
+  providerId: 'claude' | 'codex' | 'cursor' | 'gemini'; // 2026-11-22 Tharyn | ZedUIMax Gemini
   /* START> Tharyn | CursX
       2026-09-07
       What: The agent product, e.g. `codex` or `cursx`.
@@ -60,7 +60,7 @@ export interface ProjectInfo {
   displayPath: string;         // Human-readable, e.g., "/mnt/e/ZedBang"
   sessionCount: number;
   lastActivity: Date | null;
-  providerId: 'claude' | 'codex' | 'cursor';
+  providerId: 'claude' | 'codex' | 'cursor' | 'gemini'; // 2026-11-22 Tharyn | ZedUIMax Gemini
   machineName: string;
   machineId: string | null;
 }

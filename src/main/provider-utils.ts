@@ -1,10 +1,17 @@
 import { ProviderId } from '../shared/constants';
 
-export const DEFAULT_PROVIDERS: ProviderId[] = ['claude', 'codex', 'cursor'];
+/* START> Tharyn | ZedUIMax Gemini
+    2026-11-22
+    What: Recognise 'gemini' provider ids
+    Why: Gemini3 becomes an indexed provider (launch category/summary, library, resume by id) like Claude
+    Expected: 'gemini' sessions are listed, classified and resumable; existing providers unchanged
+*/
+export const DEFAULT_PROVIDERS: ProviderId[] = ['claude', 'codex', 'cursor', 'gemini'];
 
 export function isProviderId(value: string): value is ProviderId {
-  return value === 'claude' || value === 'codex' || value === 'cursor';
+  return value === 'claude' || value === 'codex' || value === 'cursor' || value === 'gemini';
 }
+// <END Tharyn | ZedUIMax Gemini
 
 export function buildProviderSessionId(providerId: ProviderId, rawId: string): string {
   return `${providerId}:${rawId}`;

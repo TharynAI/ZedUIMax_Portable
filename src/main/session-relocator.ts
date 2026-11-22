@@ -53,6 +53,8 @@ function getConfiguredProviderRoot(providerId: ProviderId): string {
       return config.providers.codex.enabled ? config.providers.codex.sessionsDir.trim() : '';
     case 'cursor':
       return config.providers.cursor.enabled ? config.providers.cursor.projectsDir.trim() : '';
+    case 'gemini': // 2026-11-22 Tharyn | ZedUIMax Gemini
+      return config.providers.geminiCli.enabled ? (config.providers.geminiCli.sessionsDir || '').trim() : '';
     default: {
       const _exhaustive: never = providerId;
       void _exhaustive;
@@ -145,7 +147,8 @@ export function relocateSession(sessionId: string, newCwd: string): RelocationRe
         result = relocateClaudeSession(rawId, normalizedNewCwd, providerRoot);
         break;
       case 'codex':
-      case 'cursor': {
+      case 'cursor':
+      case 'gemini': { // 2026-11-22 Tharyn | ZedUIMax Gemini
         // Metadata-only path: write cwd_override on the annotation row (using the full provider-prefixed ID)
         if (!directoryExists(normalizedNewCwd)) {
           result = {

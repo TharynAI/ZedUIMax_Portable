@@ -38,6 +38,14 @@ const map: Record<ProviderId, ProviderDisplay> = {
     badgeBgClass: 'bg-purple-900/20',
     badgeBorderClass: 'border-purple-700/40',
   },
+  // 2026-11-22 Tharyn | ZedUIMax Gemini: Gemini3 sessions are indexed
+  gemini: {
+    id: 'gemini',
+    label: 'Gemini',
+    assistantName: 'Gemini',
+    badgeBgClass: 'bg-sky-900/20',
+    badgeBorderClass: 'border-sky-700/40',
+  },
 };
 
 export function getProviderDisplay(id: ProviderId): ProviderDisplay {
@@ -97,6 +105,7 @@ export const PROVIDER_FILTER_OPTIONS: ReadonlyArray<{ id: ProviderFilter; label:
   { id: 'codex', label: 'Codex' },
   { id: 'cursx', label: 'CursX' },
   { id: 'cursor', label: 'Cursor' },
+  { id: 'gemini', label: 'Gemini' }, // 2026-11-22 Tharyn | ZedUIMax Gemini
 ];
 
 /* START> Tharyn | ZedMax

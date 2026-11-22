@@ -352,6 +352,39 @@ export function buildCursorSeededBranchLaunch(cwd: string, resumeId: string, tem
   };
 }
 
+/* START> Tharyn | ZedUIMax Gemini
+    2026-11-22
+    What: Gemini3 launch command (new with -SessionId, resume by id in the session's own folder)
+    Why: Gemini3 is an indexed provider; ZedUI assigns new ids and resumes sessions by id like Claude
+    Expected: wt.exe powershell -File <script> -PathFromExplorer <win> [-SessionId <id>] [-SessionCwd <win>]
+*/
+export function buildGeminiLaunch(mode: 'new' | 'resume', cwd: string, sessionId?: string): LaunchCommand {
+  const config = loadPortableConfigFromSettingsFile();
+  const provider = config.providers.geminiCli;
+  if (!provider.enabled) {
+    throw providerUnavailable('Gemini CLI');
+  }
+  const script = (mode === 'resume' ? provider.resumeScriptWin : provider.newScriptWin)?.trim();
+  if (!script) {
+    throw new Error(`Gemini CLI ${mode} script is not configured.`);
+  }
+  const winCwd = cwd.startsWith('/') ? wslToWindowsPath(cwd) : cwd;
+  const args = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script, '-PathFromExplorer', winCwd];
+  if (sessionId) args.push('-SessionId', sessionId);
+  if (mode === 'resume' && sessionId) args.push('-SessionCwd', winCwd);
+  const wslCwd = toWslPath(winCwd);
+  const wrapper = toWslPath(path.win32.join(path.win32.dirname(script), 'launch-with-validation.sh'));
+  const shellSession = mode === 'resume' ? (sessionId || 'latest') : 'new';
+  const envPrefix = mode === 'new' && sessionId ? `GEMINI3_SESSION_ID=${wslQuote(sessionId)} ` : '';
+  return {
+    command: 'wt.exe',
+    args,
+    displayCommand: displayCommand('wt', args),
+    wslShellCommand: `cd ${wslQuote(wslCwd)} && ${envPrefix}bash ${wslQuote(wrapper)} ${wslQuote(wslCwd)} ${wslQuote(shellSession)} fast`,
+  };
+}
+// <END Tharyn | ZedUIMax Gemini
+
 export function resolveAssistantWorkspace(workspace?: string): string {
   const config = loadPortableConfigFromSettingsFile();
   return ensureWorkspace(workspace || config.defaultWorkspaceWin);
@@ -391,29 +424,16 @@ export function buildAssistantLaunch(
       return mode === 'new' && newSessionId
         ? buildCursorLaunch('resume', workspaceWin, newSessionId)
         : buildCursorLaunch(mode, workspaceWin);
-    case 'gemini3': {
-      const provider = config.providers.geminiCli;
-      if (!provider.enabled) {
-        throw providerUnavailable('Gemini CLI');
-      }
-      const script = (mode === 'resume' ? provider.resumeScriptWin : provider.newScriptWin)?.trim();
-      if (!script) {
-        throw new Error(`Gemini CLI ${mode} script is not configured.`);
-      }
+    case 'gemini3':
       /* START> Tharyn | ZedUI LauncherMenu
           2026-11-22
-          What: Launch Gemini3 through wt.exe like Claude/Codex
-          Why: execFile of powershell.exe ran it hidden with piped stdio and awaited its exit - no window, launch hung
-          Expected: Gemini3 opens in a Windows Terminal tab and the launch IPC returns immediately
+          What: Launch Gemini3 through wt.exe like Claude/Codex; pass ZedUI's pre-assigned session id
+          Why: execFile of powershell.exe ran it hidden with piped stdio and awaited its exit - no window,
+               launch hung. The session id lets the launch-time category/summary attach exactly.
+          Expected: Gemini3 opens in a Windows Terminal tab as gemini:<newSessionId>; IPC returns at once
       */
-      const args = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script, '-PathFromExplorer', workspaceWin];
-      return {
-        command: 'wt.exe',
-        args,
-        displayCommand: displayCommand('wt', args),
-      };
+      return buildGeminiLaunch(mode, workspaceWin, newSessionId);
       // <END Tharyn | ZedUI LauncherMenu
-    }
     default: {
       const _exhaustive: never = launcherId;
       void _exhaustive;

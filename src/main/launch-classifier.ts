@@ -22,7 +22,7 @@ export interface ClassificationTarget {
   launcherLabel: string;
   providerId: ProviderId | null;
   product?: string;
-  exactIdentity: 'claude' | 'cursor' | null;
+  exactIdentity: 'claude' | 'cursor' | 'gemini' | null; // 2026-11-22 Tharyn | ZedUIMax Gemini
 }
 
 interface PendingLaunchClassification extends LaunchClassificationNotice {
@@ -77,11 +77,11 @@ const TARGETS: Record<AssistantLauncherId, ClassificationTarget> = {
     providerId: 'cursor',
     exactIdentity: 'cursor',
   },
-  gemini3: {
+  gemini3: { // 2026-11-22 Tharyn | ZedUIMax Gemini: indexed, exact id via --session-id
     launcherId: 'gemini3',
     launcherLabel: 'Gemini3',
-    providerId: null,
-    exactIdentity: null,
+    providerId: 'gemini',
+    exactIdentity: 'gemini',
   },
 };
 

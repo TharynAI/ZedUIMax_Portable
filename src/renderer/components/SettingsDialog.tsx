@@ -267,6 +267,8 @@ function SettingsDialog() {
           <div className="space-y-2">
             <PathInput label="New Script" value={portableConfig.providers.geminiCli.newScriptWin || ''} onChange={(value) => updateProvider('newScriptWin', value)} />
             <PathInput label="Resume Script" value={portableConfig.providers.geminiCli.resumeScriptWin || ''} onChange={(value) => updateProvider('resumeScriptWin', value)} />
+            {/* 2026-11-22 Tharyn | ZedUIMax Gemini: session root for indexing */}
+            <PathInput label="Sessions Directory" value={portableConfig.providers.geminiCli.sessionsDir || ''} onChange={(value) => updateProvider('sessionsDir', value)} />
           </div>
         )}
 

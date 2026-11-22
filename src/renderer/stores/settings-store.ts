@@ -59,7 +59,7 @@ export interface AppSettings {
       Why: Users want their last filter preserved between sessions
       Expected: Browse tab opens with the same filter chip selected as before app close
   */
-  providerFilter?: 'all' | 'claude' | 'codex' | 'cursor' | 'clausor' | 'cursx';
+  providerFilter?: 'all' | 'claude' | 'codex' | 'cursor' | 'gemini' | 'clausor' | 'cursx'; // 2026-11-22 Tharyn | ZedUIMax Gemini
   // <END Tharyn | CursorCLI
 
   portableConfig?: PortableProviderConfig;

@@ -5,12 +5,20 @@
     Why: First-class Cursor CLI integration as a peer of Claude/Codex
     Expected: Provider switches must enumerate cursor (assertNever guards in launcher)
 */
-export type ProviderId = 'claude' | 'codex' | 'cursor';
+/* START> Tharyn | ZedUIMax Gemini
+    2026-11-22
+    What: Add 'gemini' to ProviderId and PROVIDERS
+    Why: Gemini3 becomes an indexed provider (launch category/summary, library, resume by id) like Claude
+    Expected: 'gemini' sessions are listed, classified and resumable; existing providers unchanged
+*/
+export type ProviderId = 'claude' | 'codex' | 'cursor' | 'gemini';
 export const PROVIDERS: { id: ProviderId; label: string }[] = [
   { id: 'claude', label: 'Claude' },
   { id: 'codex', label: 'Codex' },
   { id: 'cursor', label: 'Cursor' },
+  { id: 'gemini', label: 'Gemini' },
 ];
+// <END Tharyn | ZedUIMax Gemini
 // <END Tharyn | CursorCLI
 
 // Session filtering defaults

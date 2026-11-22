@@ -26,6 +26,7 @@ import {
   buildCodexLaunch,
   buildCursorCreateChatCommand,
   buildCursorLaunch,
+  buildGeminiLaunch,
   buildCursorSeededBranchLaunch,
 } from './launch-config';
 
@@ -104,6 +105,16 @@ export async function continueSession(sessionId: string, opts?: { codexVariant?:
       }
       return;
     }
+    case 'gemini': { // 2026-11-22 Tharyn | ZedUIMax Gemini
+      const launch = buildGeminiLaunch('resume', cwd, rawId);
+      try {
+        await runLaunchCommand(launch.command, launch.args, 'Launching Gemini session:');
+      } catch (error) {
+        safeError('Failed to launch Gemini session:', error);
+        throw error;
+      }
+      return;
+    }
     case 'claude': {
       const launch = buildClaudeLaunch('resume', cwd, rawId, undefined, details.product);
       try {
@@ -143,6 +154,10 @@ export async function newSession(directory: string, providerId: ProviderId = 'cl
     }
     case 'cursor': {
       launch = buildCursorLaunch('new', directory);
+      break;
+    }
+    case 'gemini': { // 2026-11-22 Tharyn | ZedUIMax Gemini
+      launch = buildGeminiLaunch('new', directory);
       break;
     }
     case 'claude': {
@@ -195,6 +210,14 @@ export function getResumeCommand(sessionId: string): string | null {
     case 'cursor': {
       try {
         const launch = buildCursorLaunch('resume', cwd, rawId);
+        return launch.wslShellCommand || launch.displayCommand;
+      } catch {
+        return null;
+      }
+    }
+    case 'gemini': { // 2026-11-22 Tharyn | ZedUIMax Gemini
+      try {
+        const launch = buildGeminiLaunch('resume', cwd, rawId);
         return launch.wslShellCommand || launch.displayCommand;
       } catch {
         return null;

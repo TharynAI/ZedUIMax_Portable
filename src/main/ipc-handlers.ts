@@ -641,7 +641,7 @@ export function setupIpcHandlers(): void {
       }
 
       let nativeSessionId: string | undefined;
-      if (mode === 'new' && target.exactIdentity === 'claude') {
+      if (mode === 'new' && (target.exactIdentity === 'claude' || target.exactIdentity === 'gemini')) { // 2026-11-22 Tharyn | ZedUIMax Gemini
         nativeSessionId = require('crypto').randomUUID();
       } else if (mode === 'new' && target.exactIdentity === 'cursor') {
         nativeSessionId = await mintCursorChatUuid();

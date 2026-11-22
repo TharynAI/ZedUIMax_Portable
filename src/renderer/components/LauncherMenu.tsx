@@ -3,7 +3,7 @@
     What: Collect category and summary before every new indexed CLI launch.
     Why: A new native session otherwise arrives as Ungrouped and becomes immediate cleanup noise.
     Expected: Claude2, Codex2, CursX, and Cursor launches enter the library already named and
-         grouped; Resume is unchanged; Gemini states that its sessions are not indexed yet.
+         grouped; Resume is unchanged. 2026-11-22: Gemini3 is indexed too (category/summary at launch).
 */
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
@@ -22,7 +22,7 @@ const LAUNCHERS: LauncherOption[] = [
   { id: 'clausor', label: 'Clausor', indexed: true },
   { id: 'codex2', label: 'Codex2', indexed: true },
   { id: 'cursx', label: 'CursX', indexed: true },
-  { id: 'gemini3', label: 'Gemini3', indexed: false },
+  { id: 'gemini3', label: 'Gemini3', indexed: true }, // 2026-11-22 Tharyn | ZedUIMax Gemini: exact id via --session-id
   { id: 'cursor', label: 'Cursor', indexed: true },
 ];
 

@@ -83,6 +83,8 @@ export interface CursorProviderConfig extends PortableProviderBase {
 export interface GeminiCliProviderConfig extends PortableProviderBase {
   newScriptWin?: string;
   resumeScriptWin?: string;
+  // 2026-11-22 Tharyn | ZedUIMax Gemini: Gemini CLI tmp root (holds projects.json siblings' <project>/chats/session-*.jsonl)
+  sessionsDir?: string;
 }
 
 export interface GeminiApiProviderConfig extends PortableProviderBase {

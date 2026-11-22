@@ -105,6 +105,7 @@ export function createDefaultPortableConfig(): PortableProviderConfig {
         status: 'disabled',
         newScriptWin: '',
         resumeScriptWin: '',
+        sessionsDir: '', // 2026-11-22 Tharyn | ZedUIMax Gemini
       },
       geminiApi: {
         enabled: false,
@@ -197,6 +198,7 @@ export function normalizePortableConfig(value: unknown): PortableProviderConfig 
         verifiedAt: asString(geminiCli.verifiedAt) || undefined,
         newScriptWin: asString(geminiCli.newScriptWin, defaults.providers.geminiCli.newScriptWin),
         resumeScriptWin: asString(geminiCli.resumeScriptWin, defaults.providers.geminiCli.resumeScriptWin),
+        sessionsDir: asString(geminiCli.sessionsDir, defaults.providers.geminiCli.sessionsDir), // 2026-11-22 Tharyn | ZedUIMax Gemini
       },
       geminiApi: {
         ...defaults.providers.geminiApi,
@@ -480,6 +482,7 @@ export async function testProvider(configValue: unknown, provider: PortableProvi
       checks = [
         fileCheck('geminiCli.newScript', 'Gemini new-session script', config.providers.geminiCli.newScriptWin || '', config.providers.geminiCli.enabled),
         fileCheck('geminiCli.resumeScript', 'Gemini resume script', config.providers.geminiCli.resumeScriptWin || '', config.providers.geminiCli.enabled),
+        fileCheck('geminiCli.sessionsDir', 'Gemini sessions directory', config.providers.geminiCli.sessionsDir || '', config.providers.geminiCli.enabled), // 2026-11-22 Tharyn | ZedUIMax Gemini
       ];
       break;
     case 'geminiApi':
