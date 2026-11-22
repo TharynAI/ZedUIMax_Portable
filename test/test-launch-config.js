@@ -159,7 +159,10 @@ try {
   assert(classifiedCursor.displayCommand.includes('22222222-2222-4222-8222-222222222222'));
 
   const gemini = buildAssistantLaunch('gemini3', 'new', 'E:\\PortableWorkspace');
-  assert.strictEqual(gemini.command, 'powershell.exe');
+  // 2026-11-22 Tharyn | ZedUI LauncherMenu: Gemini3 opens in Windows Terminal like Claude/Codex
+  assert.strictEqual(gemini.command, 'wt.exe');
+  assert.strictEqual(gemini.args[0], 'powershell.exe');
+  assert(gemini.args.includes('-PathFromExplorer'));
   assert(gemini.displayCommand.includes('C:\\PortableTools\\gemini-new.ps1'));
   assertNoLegacyPath(gemini.displayCommand);
 

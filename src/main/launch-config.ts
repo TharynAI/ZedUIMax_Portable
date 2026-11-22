@@ -400,12 +400,19 @@ export function buildAssistantLaunch(
       if (!script) {
         throw new Error(`Gemini CLI ${mode} script is not configured.`);
       }
-      const args = ['-ExecutionPolicy', 'Bypass', '-File', script, '-PathFromExplorer', workspaceWin];
+      /* START> Tharyn | ZedUI LauncherMenu
+          2026-11-22
+          What: Launch Gemini3 through wt.exe like Claude/Codex
+          Why: execFile of powershell.exe ran it hidden with piped stdio and awaited its exit - no window, launch hung
+          Expected: Gemini3 opens in a Windows Terminal tab and the launch IPC returns immediately
+      */
+      const args = ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', script, '-PathFromExplorer', workspaceWin];
       return {
-        command: 'powershell.exe',
+        command: 'wt.exe',
         args,
-        displayCommand: displayCommand('powershell', args),
+        displayCommand: displayCommand('wt', args),
       };
+      // <END Tharyn | ZedUI LauncherMenu
     }
     default: {
       const _exhaustive: never = launcherId;
