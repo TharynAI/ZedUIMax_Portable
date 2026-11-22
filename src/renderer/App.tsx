@@ -49,39 +49,33 @@ import LauncherMenu from './components/LauncherMenu';
 // <END | Sphere -> Tharyn | CC
 
 function App() {
-  const { sessions, projects, loadSessions, loadProjects, loadMachineProfiles, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
+  const { sessions, projects, loadSessions, loadMachineProfiles, loadTags, loadTypes, loadBranches, isLoading } = useSessionStore();
   const { loadSettings, openDialog: openSettingsDialog, settings, setZoomLevel } = useSettingsStore();
   const searchBarRef = useRef<SearchBarRef>(null);
+  const libraryStarted = useRef(false);
 
   // Load data on mount
   useEffect(() => {
-    void loadMachineProfiles().then(() => Promise.all([loadSessions(), loadProjects()]));
+    void Promise.all([loadMachineProfiles(), loadSettings()]).then(() => {
+      libraryStarted.current = true;
+      return loadSessions(true);
+    });
     loadTags();
     loadTypes();
     loadBranches();
-    loadSettings();
   }, []);
 
-  /* START> Tharyn | CursorCLI
-      2026-05-03
-      What: Re-apply persisted providerFilter after settings load (OD-1)
-      Why: loadSessions runs before loadSettings completes; without this re-apply,
-           the persisted filter is ignored on first paint
-      Expected: After settings load, session store adopts saved providerFilter and
-                triggers a fresh loadSessions with the correct provider arg
-  */
+  // Bootstrap already hydrates the filter; later settings resets still update it.
   const settingsIsLoaded = useSettingsStore(s => s.isLoaded);
   const persistedProviderFilter = useSettingsStore(s => s.settings.providerFilter);
   const sessionProviderFilter = useSessionStore(s => s.providerFilter);
   const setSessionProviderFilter = useSessionStore(s => s.setProviderFilter);
   useEffect(() => {
-    if (!settingsIsLoaded) return;
+    if (!settingsIsLoaded || !libraryStarted.current) return;
     if (!persistedProviderFilter) return;
     if (persistedProviderFilter === sessionProviderFilter) return;
     setSessionProviderFilter(persistedProviderFilter);
-    // setProviderFilter triggers loadSessions/loadProjects internally
   }, [settingsIsLoaded, persistedProviderFilter]);
-  // <END Tharyn | CursorCLI
 
   // Enable keyboard shortcuts
   useKeyboardShortcuts({
@@ -142,8 +136,7 @@ function App() {
   // <END Tharyn | ZedUI Scrollbars
 
   const handleRefresh = () => {
-    loadSessions();
-    loadProjects();
+    loadSessions(true);
     loadTags();
     loadBranches();
   };
@@ -436,7 +429,7 @@ function StatusBar() {
           <>
             {towerHandle && <span className="zed-status-handle">{towerHandle}</span>}
             <span>Session {selectedSession.shortId}</span>
-            <span>{selectedSession.messageCount} messages</span>
+            {selectedSession.messageCount !== null && <span>{selectedSession.messageCount} messages</span>}
             <span>{selectedSession.projectDisplay}</span>
           </>
         ) : (

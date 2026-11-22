@@ -28,7 +28,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     deleteSession,
     continueSession,
     loadSessions,
-    loadProjects,
     loadTags,
     loadBranches,
   } = useSessionStore();
@@ -44,11 +43,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
   // Refresh all data and clear selection
   const handleRefresh = useCallback(() => {
     selectSession(null);  // Clear selection on refresh
-    loadSessions();
-    loadProjects();
+    loadSessions(true);
     loadTags();
     loadBranches();
-  }, [selectSession, loadSessions, loadProjects, loadTags, loadBranches]);
+  }, [selectSession, loadSessions, loadTags, loadBranches]);
   // <END | Sphere -> Tharyn | CC
 
   // Navigate to next/previous session in list

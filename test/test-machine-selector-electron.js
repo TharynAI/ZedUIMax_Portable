@@ -102,10 +102,14 @@ app.whenReady().then(async () => {
   fs.writeFileSync(path.join(fixture, 'settings.json'), JSON.stringify({ portableConfig: config, zoomLevel: 1 }));
   require(path.join(modules, 'metadata-db.js')).initDb();
   require(path.join(modules, 'ipc-handlers.js')).setupIpcHandlers();
-  for (const channel of ['machines:list', 'sessions:get', 'sessions:projects']) ipcMain.removeHandler(channel);
+  for (const channel of ['machines:list', 'sessions:get', 'sessions:projects', 'sessions:library']) ipcMain.removeHandler(channel);
   ipcMain.handle('machines:list', () => profiles);
   ipcMain.handle('sessions:get', (_, days, limit, providers, machineKey) => { sessionCalls.push(machineKey); return []; });
   ipcMain.handle('sessions:projects', (_, providers, machineKey) => { projectCalls.push(machineKey); return []; });
+  ipcMain.handle('sessions:library', (_, days, providers, machineKey) => {
+    sessionCalls.push(machineKey); projectCalls.push(machineKey);
+    return { sessions: [], projects: [] };
+  });
   win = new BrowserWindow({ show: false, width: 1700, height: 900,
     webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(modules, 'preload.js') } });
   await win.loadFile(path.join(contentRoot, 'dist/renderer/index.html'));

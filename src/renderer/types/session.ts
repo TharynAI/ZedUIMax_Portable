@@ -21,7 +21,7 @@ export interface Session {
   autoSummary: string;         // Claude's auto-generated summary
   firstMessage: string;        // Truncated first user message
   timestamp: Date;             // Session start time
-  messageCount: number;        // Total messages
+  messageCount: number | null; // Cursor library rows defer the count until details are read
   cwd: string;                 // Working directory
   fileSize: number;            // File size in bytes
   filePath: string;            // Full path to .jsonl file
@@ -67,6 +67,7 @@ export interface ProjectInfo {
 
 // Session details with full message history
 export interface SessionDetails extends Session {
+  messageCount: number;
   messages: SessionMessage[];
   version: string;
 }

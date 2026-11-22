@@ -188,10 +188,10 @@ function PreviewMetadata({ session }: { session: any }) {
           <Clock size={14} />
           <span>{session.dateDisplay}</span>
         </div>
-        <div className="flex items-center gap-2 text-text-secondary">
+        {session.messageCount !== null && <div className="flex items-center gap-2 text-text-secondary">
           <MessageSquare size={14} />
           <span>{session.messageCount} messages</span>
-        </div>
+        </div>}
         <div className="flex items-center gap-2 text-text-secondary">
           <HardDrive size={14} />
           <span>{session.sizeDisplay}</span>

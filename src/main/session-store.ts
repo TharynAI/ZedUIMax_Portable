@@ -12,6 +12,7 @@ import { canonPath, productById, productForFile, productsForProvider, toNativeRe
 import path from 'path';
 import readline from 'readline';
 import { forEachLineSync } from './jsonl-lines';
+import type { SessionLibraryCache } from './session-library-cache';
 import {
   DEFAULT_DAYS,
   DEFAULT_LIMIT,
@@ -62,7 +63,7 @@ export interface SessionInfo {
   autoSummary: string;
   firstMessage: string;
   timestamp: Date;
-  messageCount: number;
+  messageCount: number | null;
   cwd: string;
   filePath: string;
   fileSize: number;
@@ -95,6 +96,7 @@ export interface SessionIdentity {
 }
 
 export interface SessionDetails extends SessionInfo {
+  messageCount: number;
   messages: any[];
   version: string;
 }
@@ -703,7 +705,7 @@ export function getAllProjects(providerFilter?: string[], selectedMachineKey?: s
  * Parse a .jsonl session file, extract key info.
  * Only reads the first few lines for efficiency.
  */
-function parseSessionFile(filePath: string, projectPath: string, projectDisplay: string): SessionInfo | null {
+function parseSessionFile(filePath: string, projectPath: string, projectDisplay: string, stat: fs.Stats): SessionInfo | null {
   const rawSessionId = path.basename(filePath, '.jsonl');
   const providerId: ProviderId = 'claude';
   const sessionId = buildSessionId(providerId, rawSessionId);
@@ -775,8 +777,6 @@ function parseSessionFile(filePath: string, projectPath: string, projectDisplay:
       }
     }
 
-    const stat = fs.statSync(filePath);
-
     /* START> 2025-12-05 | Sphere -> Tharyn | CC
     * Fix: Use file modification time for session timestamp
     * Previously used first message timestamp which never updated on resume
@@ -809,10 +809,8 @@ function parseSessionFile(filePath: string, projectPath: string, projectDisplay:
 /**
  * Get sessions, optionally filtered by project and age.
  */
-function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS, product?: string): SessionInfo[] {
+function getClaudeSessions(projectsRoot: string, cutoff: Date, product: string, cache?: SessionLibraryCache): SessionInfo[] {
   const sessions: SessionInfo[] = [];
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
 
   if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
@@ -838,8 +836,9 @@ function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS, pr
           continue;
         }
 
-        const session = parseSessionFile(filePath, dirname, projectDisplay);
-        if (session && session.timestamp >= cutoff && (session.messageCount > 0 || session.autoSummary)) {
+        const parse = () => parseSessionFile(filePath, dirname, projectDisplay, stat);
+        const session = cache ? cache.read('claude', filePath, stat, parse) : parse();
+        if (session && session.timestamp >= cutoff && ((session.messageCount ?? 0) > 0 || session.autoSummary)) {
           session.product = productForFile(filePath, 'claude')?.id || product || 'claude-code';
           sessions.push(session);
         }
@@ -855,12 +854,23 @@ function getClaudeSessions(projectsRoot: string, days: number = DEFAULT_DAYS, pr
 /**
  * Aggregate sessions across providers with optional filter.
  */
-export function getSessions(
-  providerFilter?: string[],
-  days: number = DEFAULT_DAYS,
-  limit: number = DEFAULT_LIMIT,
-  selectedMachineKey?: string,
-): SessionInfo[] {
+export interface SessionLibraryInventory {
+  startedAt: number;
+  machine: MachineProfile;
+  groups: Array<{ rows: SessionInfo[]; codex?: true }>;
+}
+
+function libraryCutoff(startedAt: number, days: number): Date {
+  const cutoff = new Date(startedAt);
+  cutoff.setDate(cutoff.getDate() - days);
+  return cutoff;
+}
+
+/* START> Tharyn | ZedUIMax Startup Performance
+   2026-11-22: Inventory once on the worker. The list and project counts project distinct
+   date windows and limits from it, preserving Codex's per-root empty-window fallback.
+*/
+export function scanSessionLibrary(windows: number[], providerFilter?: string[], cache?: SessionLibraryCache): SessionLibraryInventory {
   /* START> Tharyn | CursorCLI
       2026-05-03
       What: Default provider list now includes 'cursor' so Browse aggregates all three providers
@@ -870,11 +880,15 @@ export function getSessions(
   const { config, providers } = getConfiguredProviders(providerFilter);
   // <END Tharyn | CursorCLI
 
-  let sessions: SessionInfo[] = [];
+  const startedAt = Date.now();
+  const cutoff = libraryCutoff(startedAt, Math.max(...windows));
+  const narrowest = libraryCutoff(startedAt, Math.min(...windows));
+  const yearCutoff = libraryCutoff(startedAt, 365);
+  const groups: SessionLibraryInventory['groups'] = [];
 
   if (providers.includes('claude')) {
     for (const root of claudeFamilyRoots(config)) {
-      sessions = sessions.concat(getClaudeSessions(root.dir, days, root.product));
+      groups.push({ rows: getClaudeSessions(root.dir, cutoff, root.product, cache) });
     }
   }
   if (providers.includes('codex')) {
@@ -890,16 +904,31 @@ export function getSessions(
               it came from. With no registry, the configured root is used exactly as before.
     */
     for (const root of codexFamilyRoots(config)) {
-      sessions = sessions.concat(getCodexSessions(root.dir, days, root.product));
+      groups.push({ codex: true, rows: getCodexSessions(root.dir, cutoff, narrowest, yearCutoff, root.product, cache) });
     }
     // <END Tharyn | CursX
   }
   if (providers.includes('cursor')) {
-    sessions = sessions.concat(getCursorSessions(getProviderRoot(config, 'cursor'), days));
+    groups.push({ rows: getCursorSessions(getProviderRoot(config, 'cursor'), cutoff, cache) });
   }
   if (providers.includes('gemini')) { // 2026-11-22 Tharyn | ZedUIMax Gemini
-    sessions = sessions.concat(getGeminiSessions(getProviderRoot(config, 'gemini'), days));
+    groups.push({ rows: getGeminiSessions(getProviderRoot(config, 'gemini'), cutoff, cache) });
   }
+  return { startedAt, machine: config.machine, groups };
+}
+
+export function projectSessionLibrary(
+  inventory: SessionLibraryInventory, days: number, limit: number, providerFilter?: string[], selectedMachineKey?: string,
+): SessionInfo[] {
+  const cutoff = libraryCutoff(inventory.startedAt, days);
+  const sessions = inventory.groups.flatMap(({ rows, codex }) => {
+    const recent = rows.filter(row => row.timestamp >= cutoff);
+    if (codex && recent.length === 0 && days < 365) {
+      const fallback = libraryCutoff(inventory.startedAt, 365);
+      return rows.filter(row => row.timestamp >= fallback);
+    }
+    return recent;
+  }).map(row => ({ ...row }));
 
   /* START> Tharyn | CursorCLI
       2026-05-04
@@ -926,14 +955,21 @@ export function getSessions(
   }
   // <END Tharyn | CursorCLI
 
-  sessions = dedupeSessionsById(sessions.filter(session => matchesSessionFilter(session, providerFilter)))
-    .map((session) => withProductLabel(withMachineProfile(session, config.machine)));
-  const effectiveMachineKey = selectedMachineKey || machineProfileKey(config.machine);
-  sessions = filterSessionsByMachine(sessions, effectiveMachineKey);
-  sessions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  const projected = dedupeSessionsById(sessions.filter(session => matchesSessionFilter(session, providerFilter)))
+    .map((session) => withProductLabel(withMachineProfile(session, inventory.machine)));
+  const effectiveMachineKey = selectedMachineKey || machineProfileKey(inventory.machine);
+  const local = filterSessionsByMachine(projected, effectiveMachineKey);
+  local.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  return sessions.slice(0, limit);
+  return local.slice(0, limit);
 }
+
+export function getSessions(
+  providerFilter?: string[], days: number = DEFAULT_DAYS, limit: number = DEFAULT_LIMIT, selectedMachineKey?: string,
+): SessionInfo[] {
+  return projectSessionLibrary(scanSessionLibrary([days], providerFilter), days, limit, providerFilter, selectedMachineKey);
+}
+// <END Tharyn | ZedUIMax Startup Performance
 
 /* START> Tharyn | CursorCLI
     2026-05-03
@@ -941,14 +977,12 @@ export function getSessions(
     Why: Discover Cursor sessions for the Browse tab as peers of Claude/Codex
     Expected: Returns SessionInfo[] for all top-level transcripts (skips the subagents/ subdirectory)
 */
-function getCursorSessions(projectsRoot: string, days: number = DEFAULT_DAYS): SessionInfo[] {
+function getCursorSessions(projectsRoot: string, cutoff: Date, cache?: SessionLibraryCache): SessionInfo[] {
   if (!projectsRoot || !fs.existsSync(projectsRoot)) {
     return [];
   }
 
   const sessions: SessionInfo[] = [];
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
 
   let projectSlugs: string[] = [];
   try {
@@ -975,14 +1009,13 @@ function getCursorSessions(projectsRoot: string, days: number = DEFAULT_DAYS): S
       const chatId = chatDir.name;
       // Top-level transcript file is named after the chat UUID; subagents live in a sibling dir
       const transcriptFile = path.join(transcriptsDir, chatId, `${chatId}.jsonl`);
-      if (!fs.existsSync(transcriptFile)) continue;
-
       try {
         const stat = fs.statSync(transcriptFile);
         if (stat.size < 64) continue; // Cursor transcripts can be smaller than Claude/Codex; loosen the floor
         if (stat.mtime < cutoff) continue;
 
-        const session = parseCursorSessionFile(transcriptFile, slug, stat);
+        const parse = () => parseCursorSessionFile(transcriptFile, slug, stat);
+        const session = cache ? cache.read('cursor', transcriptFile, stat, parse) : parse();
         if (session) {
           sessions.push(session);
         }
@@ -1122,22 +1155,21 @@ function parseCursorSessionFile(filePath: string, slug: string, stat: fs.Stats):
   const cwd = cursorSlugToWslPath(slug);
 
   let firstMessage = '';
-  let messageCount = 0;
+  let hasMessage = false;
 
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    // Find the preview, not a total. Keep reading if the first user text is past a large preamble.
+    forEachLineSync(filePath, (line) => {
+      if (!line.trim()) return;
       let entry: any;
       try {
         entry = JSON.parse(line);
       } catch {
-        continue;
+        return;
       }
       const role = entry.role;
-      if (role !== 'user' && role !== 'assistant') continue;
-      messageCount++;
+      if (role !== 'user' && role !== 'assistant') return;
+      hasMessage = true;
 
       if (!firstMessage && role === 'user') {
         const msg = entry.message || {};
@@ -1149,14 +1181,15 @@ function parseCursorSessionFile(filePath: string, slug: string, stat: fs.Stats):
           const m = text.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/);
           if (m) text = m[1];
           firstMessage = text.length > 200 ? text.slice(0, 200) + '...' : text;
+          if (firstMessage) return false;
         }
       }
-    }
+    }, 64 * 1024);
   } catch {
     return null;
   }
 
-  if (messageCount === 0) return null;
+  if (!hasMessage) return null;
 
   return {
     sessionId,
@@ -1167,7 +1200,7 @@ function parseCursorSessionFile(filePath: string, slug: string, stat: fs.Stats):
     autoSummary: '',
     firstMessage: firstMessage || '(Cursor session)',
     timestamp: stat.mtime,
-    messageCount,
+    messageCount: null,
     cwd,
     filePath,
     fileSize: stat.size,
@@ -1434,13 +1467,12 @@ function geminiSessionFromFile(root: string, filePath: string, projectDir: strin
   };
 }
 
-function getGeminiSessions(root: string, days: number = DEFAULT_DAYS): SessionInfo[] {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
+function getGeminiSessions(root: string, cutoff: Date, cache?: SessionLibraryCache): SessionInfo[] {
   const sessions: SessionInfo[] = [];
   forEachGeminiSessionFile(root, (filePath, projectDir, stat) => {
     if (stat.mtime < cutoff) return;
-    const session = geminiSessionFromFile(root, filePath, projectDir, stat);
+    const parse = () => geminiSessionFromFile(root, filePath, projectDir, stat);
+    const session = cache ? cache.read(`gemini:${root}`, filePath, stat, parse) : parse();
     if (session) sessions.push(session);
   });
   return sessions;
@@ -1728,7 +1760,7 @@ function dedupeSessionsById(sessions: SessionInfo[]): SessionInfo[] {
 
 function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | null {
   const providerId: ProviderId = 'codex';
-  let rawSessionId = getCodexRawSessionId(filePath);
+  let rawSessionId = codexRawIdFromFileName(filePath);
   let autoSummary = '';
   let firstMessage = '';
   let model = '';
@@ -1747,7 +1779,7 @@ function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | 
 
         if (entryType === 'session_meta' || entryType === 'meta') {
           const payload = entry.payload || entry.data || entry;
-          rawSessionId = payload.id || rawSessionId;
+          if (typeof payload.id === 'string' && payload.id.trim()) rawSessionId = payload.id.trim();
           cwd = payload.cwd || payload.working_dir || cwd;
           model = payload.model || payload.model_provider || payload.model_id || payload.model_name || model;
           if (payload.timestamp && !timestamp) {
@@ -1787,7 +1819,7 @@ function parseCodexSessionFile(filePath: string, stat: fs.Stats): SessionInfo | 
       autoSummary,
       firstMessage,
       timestamp,
-      model: model || undefined,
+      ...(model ? { model } : {}),
       messageCount,
       cwd,
       filePath,
@@ -1917,8 +1949,11 @@ function codexFamilyRoots(config: PortableProviderConfig): Array<{ dir: string; 
 
 function getCodexSessions(
   sessionsRoot: string,
-  days: number = DEFAULT_DAYS,
+  cutoff: Date,
+  narrowest: Date,
+  yearCutoff: Date,
   product?: string,
+  cache?: SessionLibraryCache,
 ): SessionInfo[] {
   if (!sessionsRoot || !fs.existsSync(sessionsRoot)) {
     return [];
@@ -1926,27 +1961,24 @@ function getCodexSessions(
 
   const sessions: SessionInfo[] = [];
 
-  const scan = (windowDays: number) => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - windowDays);
-    walkCodexFiles(sessionsRoot, (filePath, stat) => {
-      if (stat.mtime < cutoff || stat.size < MIN_SESSION_SIZE) return;
-      const session = parseCodexSessionFile(filePath, stat);
-      if (session) {
-        // The root it came from IS the product. Derived here rather than re-derived at each
-        // consumer, so the badge and the launcher can never disagree about one session.
-        const resolved = product ?? productForFile(filePath, 'codex')?.id;
-        if (resolved) session.product = resolved;
-        sessions.push(session);
-      }
-    });
+  const older: Array<{ filePath: string; stat: fs.Stats }> = [];
+  const add = (filePath: string, stat: fs.Stats) => {
+    const parse = () => parseCodexSessionFile(filePath, stat);
+    const session = cache ? cache.read('codex', filePath, stat, parse) : parse();
+    if (session) {
+      const resolved = product ?? productForFile(filePath, 'codex')?.id;
+      if (resolved) session.product = resolved;
+      sessions.push(session);
+    }
   };
+  walkCodexFiles(sessionsRoot, (filePath, stat) => {
+    if (stat.size < MIN_SESSION_SIZE) return;
+    if (stat.mtime >= cutoff) add(filePath, stat);
+    else if (stat.mtime >= yearCutoff) older.push({ filePath, stat });
+  });
 
-  scan(days);
-
-  // If nothing found within the window, retry with a longer horizon (1 year)
-  if (sessions.length === 0 && days < 365) {
-    scan(365);
+  if (older.length && !sessions.some(row => row.timestamp >= narrowest)) {
+    for (const { filePath, stat } of older) add(filePath, stat);
   }
 
   return sessions;

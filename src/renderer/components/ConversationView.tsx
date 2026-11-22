@@ -157,7 +157,7 @@ function ConversationView() {
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <Loader2 size={32} className="mb-4 animate-spin text-accent" />
         <p className="text-sm">Loading conversation...</p>
-        {selectedSession && (
+        {selectedSession && selectedSession.messageCount !== null && (
           <p className="text-xs mt-2 opacity-70">
             {selectedSession.messageCount} messages
           </p>

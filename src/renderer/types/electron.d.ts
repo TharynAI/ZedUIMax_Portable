@@ -27,6 +27,7 @@ import type {
 export interface ElectronAPI {
   // Session operations
   getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
+  getSessionLibrary: (days?: number, providerFilter?: string[], machineKey?: string) => Promise<{ sessions: any[]; projects: any[] }>;
   getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
   searchSessions: (query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => Promise<any[]>;

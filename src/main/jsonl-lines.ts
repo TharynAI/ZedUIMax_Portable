@@ -12,10 +12,10 @@ import fs from 'fs';
 const CHUNK_BYTES = 4 * 1024 * 1024;
 
 /** Calls `onLine` for each line. Return `false` from `onLine` to stop early. */
-export function forEachLineSync(filePath: string, onLine: (line: string) => boolean | void): void {
+export function forEachLineSync(filePath: string, onLine: (line: string) => boolean | void, chunkBytes = CHUNK_BYTES): void {
   const fd = fs.openSync(filePath, 'r');
   try {
-    const buffer = Buffer.allocUnsafe(CHUNK_BYTES);
+    const buffer = Buffer.allocUnsafe(chunkBytes);
     let carry: Buffer[] = [];
     let position = 0;
     for (;;) {

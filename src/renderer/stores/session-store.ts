@@ -71,6 +71,13 @@ const yieldToRenderer = () => new Promise<void>((resolve) => setTimeout(resolve,
 let hasHydratedProviderFilter = false;
 // <END Tharyn | CursorCLI
 
+let sessionLoad = 0;
+let projectLoad = 0;
+
+function projectDates(projects: ProjectInfo[]): ProjectInfo[] {
+  return projects.map(p => ({ ...p, lastActivity: p.lastActivity ? new Date(p.lastActivity) : null }));
+}
+
 interface SessionStore {
   // Data
   sessions: SessionViewModel[];
@@ -104,7 +111,7 @@ interface SessionStore {
   providerFilter: ProviderFilter;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (includeProjects?: boolean) => Promise<void>;
   loadProjects: () => Promise<void>;
   loadMachineProfiles: () => Promise<void>;
   loadTags: () => Promise<void>;
@@ -228,7 +235,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   // Load sessions from main process
-  loadSessions: async () => {
+  loadSessions: async (includeProjects = false) => {
     /* START> Tharyn | CursorCLI
         2026-05-03
         What: Hydrate providerFilter from settings on first call (OD-1)
@@ -253,6 +260,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       }
     }
     // <END Tharyn | CursorCLI
+    const load = ++sessionLoad;
     set({ isLoading: true, error: null });
     try {
       const { daysFilter, searchQuery, providerFilter, selectedMachineKey } = get();
@@ -261,10 +269,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       let sessions: SessionViewModel[];
 
       if (searchQuery) {
-        sessions = await window.electronAPI.searchSessions(searchQuery, undefined, selectedMachineKey || undefined, providerArg);
+        [sessions] = await Promise.all([
+          window.electronAPI.searchSessions(searchQuery, undefined, selectedMachineKey || undefined, providerArg),
+          includeProjects ? get().loadProjects() : undefined,
+        ]);
+      } else if (includeProjects) {
+        const projectsRequest = ++projectLoad;
+        const result = await window.electronAPI.getSessionLibrary(daysFilter, providerArg, selectedMachineKey || undefined);
+        if (projectsRequest === projectLoad) set({ projects: projectDates(result.projects) });
+        sessions = result.sessions;
       } else {
         sessions = await window.electronAPI.getSessions(daysFilter, undefined, providerArg, selectedMachineKey || undefined);
       }
+      if (load !== sessionLoad) return;
 
       // Convert timestamps to Date objects
       sessions = sessions.map(s => ({
@@ -286,22 +303,18 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         set({ selectedSession: selected || null });
       }
     } catch (error) {
-      set({ error: String(error), isLoading: false });
+      if (load === sessionLoad) set({ error: String(error), isLoading: false });
     }
   },
 
   // Load projects
   loadProjects: async () => {
+    const load = ++projectLoad;
     try {
       const { providerFilter, selectedMachineKey } = get();
       const providerArg = providerFilter === 'all' ? undefined : [providerFilter];
       const projects = await window.electronAPI.getProjects(providerArg, selectedMachineKey || undefined);
-      set({
-        projects: projects.map((p: any) => ({
-          ...p,
-          lastActivity: p.lastActivity ? new Date(p.lastActivity) : null,
-        })),
-      });
+      if (load === projectLoad) set({ projects: projectDates(projects) });
     } catch (error) {
       console.error('Failed to load projects:', error);
     }
@@ -392,21 +405,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       console.error('Failed to persist providerFilter:', err);
     }
     // <END Tharyn | CursorCLI
-    get().loadSessions();
-    get().loadProjects();
+    void get().loadSessions(true);
   },
 
   setMachineFilter: async (machineKey) => {
     if (machineKey === get().selectedMachineKey) return;
     set({ selectedMachineKey: machineKey, selectedSessionId: null, selectedSession: null });
-    await Promise.all([get().loadSessions(), get().loadProjects()]);
+    await get().loadSessions(true);
   },
 
   // Refresh all data
   refreshData: async () => {
     await Promise.all([
-      get().loadSessions(),
-      get().loadProjects(),
+      get().loadSessions(true),
       get().loadTags(),
       get().loadTypes(),
       get().loadBranches(),
@@ -642,8 +653,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           selectedSession: state.selectedSession?.sessionId === sessionId ? null : state.selectedSession,
         }));
 
-        // Reload projects to update counts
-        get().loadProjects();
+        // Supersede any in-flight scan that still saw the deleted transcript.
+        void get().loadSessions(true);
 
         return true;
       }
@@ -966,8 +977,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       selectedSession: deletedIds.has(state.selectedSession?.sessionId || '') ? null : state.selectedSession,
     }));
 
-    // Reload projects
-    get().loadProjects();
+    if (deletedCount > 0) void get().loadSessions(true);
 
     return deletedCount;
   },

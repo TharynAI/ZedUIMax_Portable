@@ -6,9 +6,7 @@ import { ipcMain, dialog, app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  getSessions,
   getSessionDetails,
-  getAllProjects,
   getMachineProfiles,
   getResumeInfo,
   formatSize,
@@ -23,6 +21,7 @@ import {
   prepareSessionSearchLookup,
   prepareSessionSearchDetails,
 } from './session-store';
+import { loadSessionLibrary } from './session-library';
 import {
   getAnnotation,
   setAnnotation,
@@ -190,8 +189,13 @@ function enhanceSession(session: any) {
 export function setupIpcHandlers(): void {
   // Session operations
   ipcMain.handle('sessions:get', async (_, days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => {
-    const sessions = getSessions(providerFilter as any, days || DEFAULT_DAYS, limit || DEFAULT_LIMIT, machineKey);
+    const { sessions } = await loadSessionLibrary('sessions', days || DEFAULT_DAYS, limit || DEFAULT_LIMIT, providerFilter, machineKey);
     return sessions.map(enhanceSession);
+  });
+
+  ipcMain.handle('sessions:library', async (_, days?: number, providerFilter?: string[], machineKey?: string) => {
+    const { sessions, projects } = await loadSessionLibrary('both', days, DEFAULT_LIMIT, providerFilter, machineKey);
+    return { sessions: sessions.map(enhanceSession), projects };
   });
 
   ipcMain.handle('machines:list', async () => getMachineProfiles());
@@ -235,7 +239,7 @@ export function setupIpcHandlers(): void {
   });
 
   ipcMain.handle('sessions:projects', async (_event, providerFilter?: string[], machineKey?: string) => {
-    return getAllProjects(providerFilter as any, machineKey);
+    return (await loadSessionLibrary('projects', DEFAULT_DAYS, DEFAULT_LIMIT, providerFilter, machineKey)).projects;
   });
 
   // Annotation operations

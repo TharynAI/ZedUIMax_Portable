@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Session operations
   getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) =>
     ipcRenderer.invoke('sessions:get', days, limit, providerFilter, machineKey),
+  getSessionLibrary: (days?: number, providerFilter?: string[], machineKey?: string) =>
+    ipcRenderer.invoke('sessions:library', days, providerFilter, machineKey),
   getMachineProfiles: () =>
     ipcRenderer.invoke('machines:list'),
   getSessionDetails: (sessionId: string) =>
@@ -219,6 +221,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 // Type declaration for the exposed API
 export type ElectronAPI = {
   getSessions: (days?: number, limit?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
+  getSessionLibrary: (days?: number, providerFilter?: string[], machineKey?: string) => Promise<{ sessions: any[]; projects: any[] }>;
   getMachineProfiles: () => Promise<MachineProfile[]>;
   getSessionDetails: (sessionId: string) => Promise<any>;
   searchSessions: (query: string, limit?: number, machineKey?: string, providerFilter?: string[]) => Promise<any[]>;

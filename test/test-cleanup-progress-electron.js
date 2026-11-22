@@ -77,7 +77,9 @@ app.whenReady().then(async () => {
   require('../dist/main/main/metadata-db.js').initDb();
 
   const sessions = require('../dist/main/main/session-store.js');
-  sessions.getSessions = () => fixtureSessions.slice();
+  require('../dist/main/main/session-library.js').loadSessionLibrary = async () => ({
+    sessions: fixtureSessions.slice(), projects: [],
+  });
   sessions.deleteSession = async sessionId => {
     deleteCalls.push(sessionId);
     await pause(900);
