@@ -73,7 +73,7 @@ export interface ElectronAPI {
     wtCommand: string;
   } | null>;
   deleteSession: (sessionId: string) => Promise<{ deleted: boolean; filePath: string; projectDisplay: string } | null>;
-  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[]) => Promise<any[]>;
+  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   relocateSession: (sessionId: string, newCwd: string) => Promise<any>;
   checkDirectoryExists: (dirPath: string) => Promise<boolean>;
   selectDirectory: () => Promise<string | null>;

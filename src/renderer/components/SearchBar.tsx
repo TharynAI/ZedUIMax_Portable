@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useSessionStore } from '../stores/session-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { Search, X, Trash2 } from 'lucide-react';
+import { Search, X, Trash2, MessageSquare } from 'lucide-react';
 import { useConfirmDialogStore } from './ConfirmDialog';
 /* START> Tharyn | CursorCLI
     2026-05-03
@@ -25,6 +25,8 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
   const {
     searchQuery,
     setSearchQuery,
+    messageSearchEnabled,
+    setMessageSearchEnabled,
     providerFilter,
     setProviderFilter,
     cleanupOldestUngrouped,
@@ -96,31 +98,42 @@ const SearchBar = forwardRef<SearchBarRef>(function SearchBar(_, ref) {
 
   return (
     <div className="zed-search-stack">
-      <div className="relative">
-        <Search
-          size={18}
-          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary"
-        />
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="Filter sessions — press Enter"
-          value={localQuery}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          className="pl-9 pr-10 py-1.5"
-        />
-        {localQuery && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-secondary hover:text-text-primary"
-            aria-label="Clear session filter"
-            title="Clear session filter"
-          >
-            <X size={18} />
-          </button>
-        )}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search
+            size={18}
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary"
+          />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder={messageSearchEnabled ? 'Search messages' : 'Filter sessions — press Enter'}
+            value={localQuery}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            className="pl-9 pr-10 py-1.5"
+          />
+          {localQuery && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-secondary hover:text-text-primary"
+              aria-label={messageSearchEnabled ? 'Clear message search' : 'Clear session filter'}
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          aria-label="Search message content"
+          aria-pressed={messageSearchEnabled}
+          title="Search message content"
+          onClick={() => setMessageSearchEnabled(!messageSearchEnabled)}
+          className="icon-btn shrink-0"
+        >
+          <MessageSquare size={16} />
+        </button>
       </div>
 
       {/* Provider filter */}

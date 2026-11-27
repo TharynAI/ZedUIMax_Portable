@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSessionStore } from './stores/session-store';
 import { useSettingsStore } from './stores/settings-store';
 import SessionTree from './components/SessionTree';
@@ -263,8 +263,9 @@ function BrowseTab({ searchBarRef }: BrowseTabProps) {
     messageSearchEnabled,
     messageSearchResults,
     messageSearchLoading,
+    messageSearchError,
     searchQuery,
-    selectSession,
+    selectMessageResult,
   } = useSessionStore();
   const { settings, saveSettings } = useSettingsStore();
   const [sidebarWidth, setSidebarWidth] = useState<number>(settings.sidebarWidth || 420);
@@ -298,11 +299,6 @@ function BrowseTab({ searchBarRef }: BrowseTabProps) {
     window.addEventListener('mouseup', handleUp);
   };
 
-  const handleSelectMessageResult = useCallback((sessionId: string, messageIndex: number) => {
-    void messageIndex;
-    selectSession(sessionId);
-  }, [selectSession]);
-
   return (
     <div className="zed-session-workbench">
       {/* Left panel - Tree or Message Search Results */}
@@ -312,15 +308,16 @@ function BrowseTab({ searchBarRef }: BrowseTabProps) {
       >
         <div className="zed-index-tools">
           <SearchBar ref={searchBarRef} />
-          {!messageSearchEnabled && <TreeModeSelector />}
+          <TreeModeSelector messagesOnly={messageSearchEnabled} />
         </div>
         <div className="zed-index-scroll">
           {messageSearchEnabled ? (
             <MessageSearchResults
               results={messageSearchResults}
               isLoading={messageSearchLoading}
+              error={messageSearchError}
               query={searchQuery}
-              onSelectSession={handleSelectMessageResult}
+              onSelectSession={selectMessageResult}
             />
           ) : (
             <SessionTree />

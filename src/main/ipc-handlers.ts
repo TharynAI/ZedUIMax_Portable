@@ -14,16 +14,16 @@ import {
   formatDate,
   getShortId,
   deleteSession,
-  searchMessages,
   matchesSessionFilter,
   matchesSessionSearchFilter,
   createSessionLookupContext,
   prepareSessionSearchLookup,
   prepareSessionSearchDetails,
 } from './session-store';
-import { loadSessionLibrary } from './session-library';
+import { loadSessionLibrary, searchSessionMessages } from './session-library';
 import {
   getAnnotation,
+  getCwdOverride,
   setAnnotation,
   toggleFavorite,
   addTags,
@@ -468,8 +468,19 @@ export function setupIpcHandlers(): void {
   * Searches across message content in JSONL files
   * 2025-12-02 Initial implementation
   */
-  ipcMain.handle('sessions:searchMessages', async (_, query: string, limit?: number, days?: number, providerFilter?: string[]) => {
-    return searchMessages(query, limit || 50, days || 30, providerFilter as any);
+  ipcMain.handle('sessions:searchMessages', async (_, query: string, limit?: number, days?: number, providerFilter?: string[], machineKey?: string) => {
+    const results = await searchSessionMessages(query, limit, days, providerFilter, machineKey);
+    const previews = new Map<string, ReturnType<typeof enhanceSession>>();
+    return results.map(result => {
+      if (!result.session) return result;
+      let session = previews.get(result.sessionId);
+      if (!session) {
+        const cwd = getCwdOverride(result.sessionId);
+        session = enhanceSession(cwd ? { ...result.session, cwd, projectDisplay: cwd } : result.session);
+        previews.set(result.sessionId, session);
+      }
+      return { ...result, session, projectDisplay: session.projectDisplay };
+    });
   });
   // <END | Sphere -> Tharyn | CC
 

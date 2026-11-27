@@ -130,6 +130,8 @@ export interface SearchResult {
 // Message search result
 export interface MessageSearchResult {
   sessionId: string;
+  product?: string;
+  session?: SessionViewModel;
   projectPath: string;
   projectDisplay: string;
   messageIndex: number;

@@ -22,14 +22,36 @@ const DAYS_OPTIONS = [
   { value: 365, label: 'Last year' },
 ];
 
-function TreeModeSelector() {
+function TreeModeSelector({ messagesOnly = false }: { messagesOnly?: boolean }) {
   const { treeMode, setTreeMode, daysFilter, setDaysFilter } = useSessionStore();
   const { settings, saveSettings } = useSettingsStore();
   const openManageTypes = useManageTypesDialogStore((state) => state.open);
 
+  const dateFilter = (
+      <div className="relative">
+        <select
+          aria-label="Session date range"
+          value={daysFilter}
+          onChange={(e) => setDaysFilter(Number(e.target.value))}
+          className="w-full appearance-none cursor-pointer py-1.5 pr-7"
+        >
+          {DAYS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={16}
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-text-secondary"
+        />
+      </div>
+  );
+
+  if (messagesOnly) return dateFilter;
+
   return (
     <div className="zed-tree-controls">
-      {/* Tree mode selector */}
       <div className="relative">
         <select
           value={treeMode}
@@ -47,25 +69,7 @@ function TreeModeSelector() {
           className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-text-secondary"
         />
       </div>
-
-      {/* Days filter */}
-      <div className="relative">
-        <select
-          value={daysFilter}
-          onChange={(e) => setDaysFilter(Number(e.target.value))}
-          className="w-full appearance-none cursor-pointer py-1.5 pr-7"
-        >
-          {DAYS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={16}
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-text-secondary"
-        />
-      </div>
+      {dateFilter}
 
       <button
         type="button"

@@ -1412,6 +1412,12 @@ select option {
   height: 16px;
 }
 
+.zed-search-stack .icon-btn[aria-pressed="true"] {
+  border-color: var(--zed-amber);
+  color: var(--zed-amber-strong);
+  background: var(--zed-panel-raised);
+}
+
 .icon-btn:hover {
   border-color: rgba(229, 164, 59, 0.50);
   background: var(--zed-panel-raised);

@@ -140,8 +140,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   * Search across message content in JSONL files
   * 2025-12-02 Initial implementation
   */
-  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[]) =>
-    ipcRenderer.invoke('sessions:searchMessages', query, limit, days, providerFilter),
+  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[], machineKey?: string) =>
+    ipcRenderer.invoke('sessions:searchMessages', query, limit, days, providerFilter, machineKey),
   // <END | Sphere -> Tharyn | CC
 
   /* START> 2025-12-08 | Sphere -> Tharyn | CC
@@ -272,7 +272,7 @@ export type ElectronAPI = {
   detectProviderDefaults: () => Promise<ProviderDefaultsDetection>;
   testProvider: (provider: PortableProviderKey) => Promise<ProviderTestResult>;
   runSetupDiagnostics: () => Promise<PortableDiagnosticsReport>;
-  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[]) => Promise<any[]>;
+  searchMessages: (query: string, limit?: number, days?: number, providerFilter?: string[], machineKey?: string) => Promise<any[]>;
   /* START> 2025-12-08 | Sphere -> Tharyn | CC */
   relocateSession: (sessionId: string, newCwd: string) => Promise<{
     success: boolean;

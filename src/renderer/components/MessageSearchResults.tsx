@@ -10,23 +10,26 @@
 import { useCallback } from 'react';
 import type { MessageSearchResult } from '../types/session';
 import { MessageSquare, User, Bot, ExternalLink } from 'lucide-react';
+import { getSessionDisplay, type ProviderId } from '../providers/display';
 
 interface MessageSearchResultsProps {
   results: MessageSearchResult[];
   isLoading: boolean;
+  error: string | null;
   query: string;
-  onSelectSession: (sessionId: string, messageIndex: number) => void;
+  onSelectSession: (result: MessageSearchResult) => void;
 }
 
 function MessageSearchResults({
   results,
   isLoading,
+  error,
   query,
   onSelectSession,
 }: MessageSearchResultsProps) {
   const handleClick = useCallback((result: MessageSearchResult) => {
     // Select the session and keep the user in the Browse workbench.
-    onSelectSession(result.sessionId, result.messageIndex);
+    onSelectSession(result);
   }, [onSelectSession]);
 
   // Highlight the matched text in snippet
@@ -78,6 +81,8 @@ function MessageSearchResults({
     );
   }
 
+  if (error) return <p role="alert" className="px-3 py-4 text-sm text-red-400">{error}</p>;
+
   if (results.length === 0 && query.length >= 2) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-text-secondary">
@@ -102,15 +107,22 @@ function MessageSearchResults({
         Found {results.length} message{results.length !== 1 ? 's' : ''} matching "{query}"
       </div>
 
-      {results.map((result, index) => (
-        <div
+      {results.map((result, index) => {
+        const providerId = result.sessionId.split(':', 1)[0] as ProviderId;
+        const display = getSessionDisplay(providerId, result.product ?? result.session?.product, result.session?.productLabel);
+        return (
+        <button
+          type="button"
           key={`${result.sessionId}-${result.messageIndex}-${index}`}
-          className="p-3 rounded-lg bg-bg-tertiary hover:bg-bg-secondary cursor-pointer transition-colors border border-transparent hover:border-accent/30"
+          className="block w-full text-left p-3 rounded-lg bg-bg-tertiary hover:bg-bg-secondary cursor-pointer transition-colors border border-transparent hover:border-accent/30"
           onClick={() => handleClick(result)}
         >
           {/* Header: Message type and project */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
+          <span className="flex items-center justify-between gap-2 mb-2">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={`shrink-0 px-1.5 py-0.5 rounded border text-xs ${display.badgeBgClass} ${display.badgeBorderClass}`}>
+                {display.label}
+              </span>
               {result.messageType === 'user' ? (
                 <User size={14} className="text-blue-400" />
               ) : (
@@ -119,31 +131,32 @@ function MessageSearchResults({
               <span className="text-xs text-text-secondary capitalize">
                 {result.messageType}
               </span>
-              <span className="text-xs text-text-secondary">
+              <span className="truncate text-xs text-text-secondary" title={result.projectDisplay}>
                 &middot; {result.projectDisplay}
               </span>
-            </div>
-            <div className="flex items-center gap-2">
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
               {result.timestamp && (
                 <span className="text-xs text-text-secondary">
                   {formatTime(result.timestamp)}
                 </span>
               )}
               <ExternalLink size={12} className="text-text-secondary opacity-50" />
-            </div>
-          </div>
+            </span>
+          </span>
 
           {/* Snippet with highlighted match */}
-          <div className="text-sm text-text-primary leading-relaxed">
+          <span className="block break-words text-sm text-text-primary leading-relaxed">
             {highlightMatch(result.snippet, result.matchStart, result.matchLength)}
-          </div>
+          </span>
 
           {/* Session ID */}
-          <div className="mt-2 text-xs text-text-secondary font-mono">
-            {result.sessionId.slice(0, 8)}... &middot; Message #{result.messageIndex + 1}
-          </div>
-        </div>
-      ))}
+          <span className="block mt-2 text-xs text-text-secondary font-mono">
+            {result.sessionId.slice(result.sessionId.indexOf(':') + 1).slice(0, 8)}... &middot; Message #{result.messageIndex + 1}
+          </span>
+        </button>
+        );
+      })}
     </div>
   );
 }

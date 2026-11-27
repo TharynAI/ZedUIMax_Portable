@@ -1365,7 +1365,7 @@ function geminiProjectCwd(root: string, projectDir: string, projectHash: string)
   return '';
 }
 
-function forEachGeminiSessionFile(root: string, visit: (filePath: string, projectDir: string, stat: fs.Stats) => void): void {
+function forEachGeminiSessionFile(root: string, visit: (filePath: string, projectDir: string, stat: fs.Stats) => boolean | void): void {
   if (!root || !fs.existsSync(root)) return;
   let projectDirs: fs.Dirent[] = [];
   try {
@@ -1384,7 +1384,7 @@ function forEachGeminiSessionFile(root: string, visit: (filePath: string, projec
     for (const file of files) {
       const filePath = path.join(chatsDir, file);
       try {
-        visit(filePath, projectDir.name, fs.statSync(filePath));
+        if (visit(filePath, projectDir.name, fs.statSync(filePath)) === false) return;
       } catch {
         continue;
       }
@@ -1398,57 +1398,71 @@ function geminiText(value: unknown): string {
   return value.map((part: any) => (part && typeof part.text === 'string' ? part.text : '')).filter(Boolean).join('\n');
 }
 
+interface GeminiMessage {
+  type: 'user' | 'assistant';
+  timestamp?: string;
+  message: { role: string; content: string };
+}
+
 interface GeminiParsed {
   header: GeminiHeader;
-  messages: { type: string; message: { role: string; content: string } }[];
+  messages: GeminiMessage[];
   firstMessage: string;
+}
+
+function geminiVisibleMessage(entry: any): GeminiMessage | null {
+  const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+  if (entry.type === 'user') {
+    if (Array.isArray(entry.content) && entry.content.length && entry.content.every((part: any) => part?.functionResponse)) return null;
+    const typed = geminiText(entry.displayContent) || geminiText(entry.content);
+    if (!typed.trim() || typed.trimStart().startsWith('<session_context>')) return null;
+    return { type: 'user', timestamp, message: { role: 'user', content: typed } };
+  }
+  const parts: string[] = [];
+  const text = geminiText(entry.content);
+  if (text) parts.push(text);
+  for (const call of Array.isArray(entry.toolCalls) ? entry.toolCalls : []) {
+    let args = '';
+    try { args = JSON.stringify(call?.args ?? {}).slice(0, 200); } catch { /* malformed tool arguments */ }
+    parts.push(`[tool_use ${call?.displayName || call?.name || 'tool'} ${args}]`);
+  }
+  return parts.length ? { type: 'assistant', timestamp, message: { role: 'assistant', content: parts.join('\n') } } : null;
 }
 
 function parseGeminiTranscript(filePath: string): GeminiParsed | null {
   let header: GeminiHeader | null = null;
-  // Gemini appends a record again each time it updates; keep the last copy, in first-seen order.
-  const records = new Map<string, any>();
+  // Keep the last visible projection per id in first-seen order, not the raw tool payloads.
+  const records = new Map<string, GeminiMessage | null>();
   forEachLineSync(filePath, (line) => {
     if (!line.trim()) return true;
     let entry: any;
     try { entry = JSON.parse(line); } catch { return true; }
+    if (!entry || typeof entry !== 'object') return true;
     if (!header && typeof entry.sessionId === 'string') {
       header = { sessionId: entry.sessionId, projectHash: String(entry.projectHash || ''),
         startTime: String(entry.startTime || ''), kind: String(entry.kind || 'main') };
-      return true;
+      return header.kind === 'main';
     }
-    if (typeof entry.id === 'string' && (entry.type === 'user' || entry.type === 'gemini')) records.set(entry.id, entry);
+    if (typeof entry.id === 'string' && (entry.type === 'user' || entry.type === 'gemini')) {
+      records.set(entry.id, geminiVisibleMessage(entry));
+    }
     return true;
   });
-  if (!header) return null;
+  if (!header || (header as GeminiHeader).kind !== 'main') return null;
 
-  const messages: GeminiParsed['messages'] = [];
-  let firstMessage = '';
-  for (const entry of records.values()) {
-    if (entry.type === 'user') {
-      const typed = geminiText(entry.displayContent) || geminiText(entry.content);
-      if (!typed || typed.startsWith('<session_context>')) continue; // CLI-injected context / tool results
-      messages.push({ type: 'user', message: { role: 'user', content: typed } });
-      if (!firstMessage) firstMessage = typed.length > 200 ? typed.slice(0, 200) + '...' : typed;
-    } else {
-      const parts: string[] = [];
-      const text = geminiText(entry.content);
-      if (text) parts.push(text);
-      for (const call of Array.isArray(entry.toolCalls) ? entry.toolCalls : []) {
-        let args = '';
-        try { args = JSON.stringify(call?.args ?? {}).slice(0, 200); } catch { args = ''; }
-        parts.push(`[tool_use ${call?.displayName || call?.name || 'tool'} ${args}]`);
-      }
-      if (parts.length) messages.push({ type: 'assistant', message: { role: 'assistant', content: parts.join('\n') } });
-    }
-  }
-  return { header, messages, firstMessage };
+  const messages = [...records.values()].filter((message): message is GeminiMessage => message !== null);
+  const first = messages.find(message => message.type === 'user')?.message.content || '';
+  return { header, messages, firstMessage: first.length > 200 ? first.slice(0, 200) + '...' : first };
 }
 
 function geminiSessionFromFile(root: string, filePath: string, projectDir: string, stat: fs.Stats): SessionInfo | null {
   const parsed = parseGeminiTranscript(filePath);
-  if (!parsed || parsed.header.kind !== 'main') return null;
+  if (!parsed) return null;
   if (geminiFileIndexRoot === root) geminiFileIndex.set(parsed.header.sessionId, { filePath, projectDir });
+  return geminiSessionInfo(root, filePath, projectDir, stat, parsed);
+}
+
+function geminiSessionInfo(root: string, filePath: string, projectDir: string, stat: fs.Stats, parsed: GeminiParsed): SessionInfo {
   const cwd = geminiProjectCwd(root, projectDir, parsed.header.projectHash);
   const { projectPath, projectDisplay } = deriveCodexProjectKey(cwd);
   return {
@@ -1490,7 +1504,7 @@ function rebuildGeminiFileIndex(root: string): void {
   geminiFileIndexBuiltAt = Date.now();
   forEachGeminiSessionFile(root, (filePath, projectDir) => {
     const header = readGeminiHeader(filePath);
-    if (header) geminiFileIndex.set(header.sessionId, { filePath, projectDir });
+    if (header?.kind === 'main') geminiFileIndex.set(header.sessionId, { filePath, projectDir });
   });
 }
 
@@ -2423,6 +2437,7 @@ export function deleteSession(sessionId: string): { deleted: boolean; filePath: 
 export interface MessageSearchResult {
   sessionId: string;
   product?: string;
+  session?: SessionInfo;
   projectPath: string;
   projectDisplay: string;
   messageIndex: number;
@@ -2832,6 +2847,45 @@ function searchCursorMessages(
 }
 // <END Tharyn | CursorCLI
 
+/* START> Tharyn | ZedUIMax Gemini Search
+   2026-11-27: Search the same deduplicated, visible records as Gemini details.
+   Reuse parsed metadata for the preview rather than reading the transcript again on click.
+*/
+function searchGeminiMessages(query: string, limit: number, days: number, root: string, machine: MachineProfile): MessageSearchResult[] {
+  const needle = query.replace(/\s+/g, ' ').trim();
+  if (needle.length < 2) return [];
+  const lower = needle.toLowerCase();
+  const cutoff = libraryCutoff(Date.now(), days);
+  const results: MessageSearchResult[] = [];
+  forEachGeminiSessionFile(root, (filePath, projectDir, stat) => {
+    if (stat.mtime < cutoff) return;
+    const parsed = parseGeminiTranscript(filePath);
+    if (!parsed) return;
+    let session: SessionInfo | undefined;
+    for (const [messageIndex, message] of parsed.messages.entries()) {
+      const text = message.message.content.replace(/\s+/g, ' ').trim();
+      const index = text.toLowerCase().indexOf(lower);
+      if (index < 0) continue;
+      session ??= withMachineProfile(geminiSessionInfo(root, filePath, projectDir, stat, parsed), machine);
+      const when = message.timestamp ? new Date(message.timestamp) : stat.mtime;
+      results.push({
+        sessionId: session.sessionId,
+        session,
+        projectPath: session.projectPath,
+        projectDisplay: session.projectDisplay,
+        messageIndex,
+        messageType: message.type === 'user' ? 'user' : 'assistant',
+        ...createSnippet(text, index, needle.length),
+        matchLength: needle.length,
+        timestamp: Number.isFinite(when.getTime()) ? when : stat.mtime,
+      });
+      if (results.length >= limit) return false;
+    }
+  });
+  return results;
+}
+// <END Tharyn | ZedUIMax Gemini Search
+
 export function searchMessages(
   query: string,
   limit: number = 50,
@@ -2867,6 +2921,9 @@ export function searchMessages(
   }
   if (providers.includes('cursor')) {
     results = results.concat(searchCursorMessages(query, limit, days, getProviderRoot(config, 'cursor')));
+  }
+  if (providers.includes('gemini')) {
+    results = results.concat(searchGeminiMessages(query, limit, days, getProviderRoot(config, 'gemini'), config.machine));
   }
 
   results.sort((a, b) => {

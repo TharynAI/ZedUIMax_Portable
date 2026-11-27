@@ -73,6 +73,20 @@ let hasHydratedProviderFilter = false;
 
 let sessionLoad = 0;
 let projectLoad = 0;
+let messageLoad = 0;
+let messagePreview = 0;
+
+function sessionDates(session: SessionViewModel): SessionViewModel {
+  return {
+    ...session,
+    timestamp: new Date(session.timestamp),
+    annotation: session.annotation ? {
+      ...session.annotation,
+      createdAt: new Date(session.annotation.createdAt),
+      updatedAt: new Date(session.annotation.updatedAt),
+    } : undefined,
+  };
+}
 
 function projectDates(projects: ProjectInfo[]): ProjectInfo[] {
   return projects.map(p => ({ ...p, lastActivity: p.lastActivity ? new Date(p.lastActivity) : null }));
@@ -174,11 +188,13 @@ interface SessionStore {
   messageSearchEnabled: boolean;
   messageSearchResults: MessageSearchResult[];
   messageSearchLoading: boolean;
+  messageSearchError: string | null;
   targetMessageIndex: number | null;  // For jumping to specific message in conversation viewer
 
   // Message search actions
   setMessageSearchEnabled: (enabled: boolean) => void;
   searchMessages: (query: string) => Promise<void>;
+  selectMessageResult: (result: MessageSearchResult) => Promise<void>;
   clearMessageSearch: () => void;
   setTargetMessage: (sessionId: string, messageIndex: number) => void;
   clearTargetMessage: () => void;
@@ -209,6 +225,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   messageSearchEnabled: false,
   messageSearchResults: [],
   messageSearchLoading: false,
+  messageSearchError: null,
   targetMessageIndex: null,
   cleanupProgress: { ...IDLE_CLEANUP_PROGRESS },
   cleanupDialogOpen: false,
@@ -236,6 +253,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   // Load sessions from main process
   loadSessions: async (includeProjects = false) => {
+    if (get().messageSearchEnabled) return get().searchMessages(get().searchQuery);
     /* START> Tharyn | CursorCLI
         2026-05-03
         What: Hydrate providerFilter from settings on first call (OD-1)
@@ -284,15 +302,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       if (load !== sessionLoad) return;
 
       // Convert timestamps to Date objects
-      sessions = sessions.map(s => ({
-        ...s,
-        timestamp: new Date(s.timestamp),
-        annotation: s.annotation ? {
-          ...s.annotation,
-          createdAt: new Date(s.annotation.createdAt),
-          updatedAt: new Date(s.annotation.updatedAt),
-        } : undefined,
-      }));
+      sessions = sessions.map(sessionDates);
 
       set({ sessions, isLoading: false });
 
@@ -362,6 +372,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   // Select a session
   selectSession: (sessionId) => {
+    ++messagePreview;
     const { sessions } = get();
     const selected = sessionId ? sessions.find(s => s.sessionId === sessionId) : null;
     set({
@@ -1049,26 +1060,33 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   */
   // Toggle message search mode
   setMessageSearchEnabled: (enabled) => {
+    if (enabled === get().messageSearchEnabled) return;
+    ++sessionLoad;
+    ++messagePreview;
+    get().clearMessageSearch();
     set({
       messageSearchEnabled: enabled,
-      messageSearchResults: [],
-      messageSearchLoading: false,
+      isLoading: false,
     });
+    void get().loadSessions(true);
   },
 
   // Perform message search
   searchMessages: async (query) => {
-    if (query.length < 2) {
-      set({ messageSearchResults: [], messageSearchLoading: false });
+    if (query.trim().length < 2) {
+      get().clearMessageSearch();
       return;
     }
 
-    set({ messageSearchLoading: true });
+    const request = ++messageLoad;
+    ++messagePreview;
+    set({ messageSearchLoading: true, messageSearchError: null });
 
     try {
-      const { daysFilter, providerFilter } = get();
+      const { daysFilter, providerFilter, selectedMachineKey } = get();
       const providerArg = providerFilter === 'all' ? undefined : [providerFilter];
-      const results = await window.electronAPI.searchMessages(query, 50, daysFilter, providerArg);
+      const results = await window.electronAPI.searchMessages(query, 50, daysFilter, providerArg, selectedMachineKey || undefined);
+      if (request !== messageLoad) return;
 
       // Convert timestamps to Date objects
       const processedResults = results.map((r: any) => ({
@@ -1078,16 +1096,35 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       set({ messageSearchResults: processedResults, messageSearchLoading: false });
     } catch (error) {
+      if (request !== messageLoad) return;
       console.error('Message search failed:', error);
-      set({ messageSearchResults: [], messageSearchLoading: false });
+      set({ messageSearchResults: [], messageSearchLoading: false, messageSearchError: 'Message search failed. Try again.' });
+    }
+  },
+
+  selectMessageResult: async (result) => {
+    get().selectSession(result.sessionId);
+    const request = messagePreview;
+    try {
+      const session = result.session || get().selectedSession || await window.electronAPI.getSessionDetails(result.sessionId);
+      if (request !== messagePreview || get().selectedSessionId !== result.sessionId) return;
+      set({ selectedSession: session ? sessionDates(session) : null });
+      if (!session) set({ messageSearchError: 'This session is no longer available.' });
+    } catch (error) {
+      if (request === messagePreview) set({ messageSearchError: 'Could not open this session.' });
+      console.error('Message search preview failed:', error);
     }
   },
 
   // Clear message search results
   clearMessageSearch: () => {
+    ++messageLoad;
+    ++messagePreview;
+    if (get().messageSearchLoading) void window.electronAPI.searchMessages('').catch(() => undefined);
     set({
       messageSearchResults: [],
       messageSearchLoading: false,
+      messageSearchError: null,
     });
   },
 
